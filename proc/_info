@@ -1,0 +1,116 @@
+m255
+K4
+z2
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+d/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/simulation/modelsim
+valu
+Z0 !s110 1478599182
+!i10b 1
+!s100 eM8Y92IVDFSL_NX4j<L;]2
+I4RdaQTTbNU8CFHFIE>Z<z2
+Z1 VDg1SIo80bB@j0V0VzS_@n1
+Z2 d/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc
+Z3 w1478598831
+8/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/alu.v
+F/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/alu.v
+L0 1
+Z4 OV;L;10.5b;63
+r1
+!s85 0
+31
+Z5 !s108 1478599182.000000
+!s107 /media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/alu.v|
+!s90 -reportprogress|300|-work|proc|-stats=none|/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/alu.v|
+!i113 1
+Z6 o-work proc
+Z7 tCvgOpt 0
+vcache
+R0
+!i10b 1
+!s100 nLzZXUQSFGmjOXA3IJ2V_3
+I0OiXNK6Sz==YJICf=Xk@B0
+R1
+R2
+R3
+8/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/cache.v
+F/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/cache.v
+L0 1
+R4
+r1
+!s85 0
+31
+R5
+!s107 /media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/cache.v|
+!s90 -reportprogress|300|-work|proc|-stats=none|/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/cache.v|
+!i113 1
+R6
+R7
+vdecoder
+Z8 !s110 1478599183
+!i10b 1
+!s100 8VFToR<N92_8ldbW2]K9j2
+IiX;MzdzPYcIOXk9X2EaF]2
+R1
+R2
+R3
+8/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/decoder.v
+F/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/decoder.v
+L0 1
+R4
+r1
+!s85 0
+31
+R5
+!s107 /media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/decoder.v|
+!s90 -reportprogress|300|-work|proc|-stats=none|/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/decoder.v|
+!i113 1
+R6
+R7
+vproc
+R8
+!i10b 1
+!s100 ST]X6nmQ9^0AJ1edf@7:J2
+I4@kBRz=hMhkofSV85MogS1
+R1
+R2
+R3
+8/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/proc.v
+F/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/proc.v
+L0 4
+R4
+r1
+!s85 0
+31
+Z9 !s108 1478599183.000000
+!s107 /media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/proc.v|
+!s90 -reportprogress|300|-work|proc|-stats=none|/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/proc.v|
+!i113 1
+R6
+R7
+vregisterFile
+R8
+!i10b 1
+!s100 ]lDHHjf6QL5d5?L4[kRCK2
+ITS_CL5eWngzi3eE[ge?JI2
+R1
+R2
+R3
+8/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/registerFile.v
+F/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/registerFile.v
+L0 1
+R4
+r1
+!s85 0
+31
+R9
+!s107 /media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/registerFile.v|
+!s90 -reportprogress|300|-work|proc|-stats=none|/media/marcos/6f3d3766-82c3-49e1-8e67-22d2e9d02b22/FIB/MIRI/QT_16-17/PA/Project/PA-Proc/registerFile.v|
+!i113 1
+R6
+R7
+nregister@file
