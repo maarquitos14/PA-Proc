@@ -2,13 +2,43 @@
 //`timescale 1ns / 10ps
 
 module proc(input clk, input rst);
+
+	// Define constants such as OPCODES
+	// MODYFING ARCH_BITS AFFECTS CACHE CONSTANTS
+	parameter	ARCH_BITS	= 32;
+
+	parameter	PC_RST		= 32'h00001000,
+						PC_EXCEPT	= 32'h00002000;
+
+	parameter 	OPCODE_ADD	= 6'h000000,
+							OPCODE_SUB	= 6'h000001,
+							OPCODE_MUL	= 6'h000010,
+							OPCODE_LDB	= 6'h010000,
+							OPCODE_LDW	= 6'h010001,
+							OPCODE_STB	= 6'h010010,
+							OPCODE_STW	= 6'h010011,
+							OPCODE_MOV	= 6'h010100,
+							OPCODE_BEQ	= 6'h110000,
+							OPCODE_JUMP	= 6'h110001,
+							OPCODE_TLBWRITE = 6'h110010,
+							OPCODE_IRET	= 6'h110011,
+							OPCODE_NOP	= 6'h111111;
+
+	
+	parameter VM_PAGE_SIZE	= 4096;
+	
+	parameter	VM_XLATE_OFFSET	= 32'h00008000;
+	
+	parameter	PRIVILEGE_USR	= 0,
+						PRIVILEGE_OS	= 1;
+
 	//Program Counter
-	reg  [31:0]	pc;
-	wire [31:0] pcNext;
+	reg  [ARCH_BITS-1:0]	pc;
+	wire [ARCH_BITS-1:0] pcNext;
 	
 	//Instruction
-	wire [31:0] instFetch;
-	reg [31:0] instDecode;
+	wire [ARCH_BITS-1:0] instFetch;
+	reg [ARCH_BITS-1:0] instDecode;
 	
 	//Instruction decoded
 	wire [6:0] opcodeDecode;
@@ -24,13 +54,13 @@ module proc(input clk, input rst);
 	wire [9:0] offsetLo;
 	
 	//Operands
-	wire [31:0] wDataALU;
-	reg [31:0] wDataWB;
+	wire [ARCH_BITS-1:0] wDataALU;
+	reg [ARCH_BITS-1:0] wDataWB;
 	wire writeEnable;
-	wire [31:0] data1Decode;
-	reg [31:0] data1ALU;
-	wire [31:0] data2Decode;
-	reg [31:0] data2ALU;
+	wire [ARCH_BITS-1:0] data1Decode;
+	reg [ARCH_BITS-1:0] data1ALU;
+	wire [ARCH_BITS-1:0] data2Decode;
+	reg [ARCH_BITS-1:0] data2ALU;
 	
 	always @(posedge clk) 
 	begin

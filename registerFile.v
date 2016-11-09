@@ -1,8 +1,8 @@
 module registerFile(input clk, input rst, input [4:0] src1, input [4:0] src2, 
-		    input [4:0] dst, input [31:0] wData, input writeEnable, 
-		    output [31:0] data1, output [31:0] data2);	
+		    						input [4:0] dst, input [proc.ARCH_BITS-1:0] wData, input writeEnable, 
+		    						output [proc.ARCH_BITS-1:0] data1, output [proc.ARCH_BITS-1:0] data2);	
 	
-	reg [31:0] registers[31:0];
+	reg [proc.ARCH_BITS-1:0] registers[proc.ARCH_BITS-1:0];
 	
 	always @(posedge clk) 
 	begin
