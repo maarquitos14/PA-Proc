@@ -30,7 +30,9 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 		begin
 			for( i = 0; i < CACHE_LINES; i=i+1 ) 
 			begin
-				validBits[i] = 0;
+				lines[i] = 128'h04008800020088000000880000008000;
+				tags[i] = 26'h40;
+				validBits[i] = 1;
 				dirtyBits[i] = 0;
 			end
 		end
