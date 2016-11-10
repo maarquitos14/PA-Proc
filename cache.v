@@ -1,5 +1,7 @@
 module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
-	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output [proc.ARCH_BITS-1:0] rData, output rValid);
+	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output [proc.ARCH_BITS-1:0] rData, output rValid,
+             output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemLine, input readMemLineValid,
+             output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
 
 
 	parameter	CACHE_LINES			= 4,
@@ -22,6 +24,11 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 	reg validBits[CACHE_LINES-1:0];
 	reg dirtyBits[CACHE_LINES-1:0];
 
+  // Variables
+	wire [TAG_BITS-1:0] tag;
+	wire [LINE_BITS-1:0] line;
+	wire [OFFSET_W_BITS-1:0] offsetW;																
+	wire [OFFSET_B_BITS-1:0] offsetB;
 	integer i;
 
 	always @(posedge clk) 
@@ -30,9 +37,7 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 		begin
 			for( i = 0; i < CACHE_LINES; i=i+1 ) 
 			begin
-				lines[i] = 128'h04008800020088000000880000008000;
-				tags[i] = 26'h40;
-				validBits[i] = 1;
+				validBits[i] = 0;
 				dirtyBits[i] = 0;
 			end
 		end
@@ -57,12 +62,16 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 				// Write data to memory	
 			//end
 		end
-	end
 
-	wire [TAG_BITS-1:0] tag;
-	wire [LINE_BITS-1:0] line;
-	wire [OFFSET_W_BITS-1:0] offsetW;																
-	wire [OFFSET_B_BITS-1:0] offsetB;
+    //Handle incoming data from memory
+    if (readMemReq && readMemLineValid)
+    begin
+      lines[line] <= readMemLine;
+      tags[line] <= tag;
+      validBits[line] <= 1'b1;
+      dirtyBits[line] <= 1'b0; 
+    end
+	end
 
 	assign tag = rAddr[proc.ARCH_BITS-1:proc.ARCH_BITS-TAG_BITS];
 	assign line = rAddr[proc.ARCH_BITS-TAG_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS];
@@ -79,4 +88,19 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 	assign rData = (rAddr == wAddr) ? wData : currentWord;
 	// if miss, to go memory and make it valid after receiving data
 	assign rValid = ((currentTag == tag) && validBits[line]);
+  
+  //Handle misses
+  assign readMemAddr = rAddr;
+  assign readMemReq = !rValid;
+endmodule 
+
+module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, output [proc.ARCH_BITS-1:0] rData, output rValid,
+                output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemLine, input readMemLineValid);
+
+  wire [proc.ARCH_BITS-1:0] nullAddr;
+  wire [proc.MEMORY_LINE_BITS-1:0] nullLine;
+  wire writeMemReq;
+  cache cacheInsInterface(clk, rst, rAddr, 32'hffffffff, 32'hffffffff, 1'h0 /*WE*/, rData, rValid,
+                          readMemAddr, readMemReq, readMemLine, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/);
+
 endmodule 

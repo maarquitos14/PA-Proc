@@ -1,29 +1,29 @@
-
 //`timescale 1ns / 10ps
 
 module proc(input clk, input rst);
 
 	// Define constants such as OPCODES
 	// MODYFING ARCH_BITS AFFECTS CACHE CONSTANTS
-	parameter	ARCH_BITS	= 32;
+  parameter ARCH_BITS        = 32,
+            MEMORY_LINE_BITS = 128;
 
 	parameter	PC_RST		= 32'h00001000,
 						PC_EXCEPT	= 32'h00002000;
 
-	parameter 	OPCODE_ADD		= 6'h00,
-							OPCODE_SUB			= 6'h01,
-							OPCODE_MUL			= 6'h02,
-							OPCODE_LDB			= 6'h10,
-							OPCODE_LDW			= 6'h11,
-							OPCODE_STB			= 6'h12,
-							OPCODE_STW			= 6'h13,
-							OPCODE_MOV			= 6'h14,
-							OPCODE_MOVI			=	6'h15,
-							OPCODE_BEQ			= 6'h30,
-							OPCODE_JUMP			= 6'h31,
-							OPCODE_TLBWRITE = 6'h32,
-							OPCODE_IRET			= 6'h33,
-							OPCODE_NOP			= 6'h7f;
+	parameter 	OPCODE_ADD		= 7'h00,
+							OPCODE_SUB			= 7'h01,
+							OPCODE_MUL			= 7'h02,
+							OPCODE_LDB			= 7'h10,
+							OPCODE_LDW			= 7'h11,
+							OPCODE_STB			= 7'h12,
+							OPCODE_STW			= 7'h13,
+							OPCODE_MOV			= 7'h14,
+							OPCODE_MOVI			=	7'h15,
+							OPCODE_BEQ			= 7'h30,
+							OPCODE_JUMP			= 7'h31,
+							OPCODE_TLBWRITE = 7'h32,
+							OPCODE_IRET			= 7'h33,
+							OPCODE_NOP			= 7'h7f;
 
 	
 	parameter VM_PAGE_SIZE	= 4096;
@@ -34,11 +34,13 @@ module proc(input clk, input rst);
 						PRIVILEGE_OS	= 1;
 
 	//Program Counter
-	reg  [ARCH_BITS-1:0]	pc;
+	reg  [ARCH_BITS-1:0] pc;
 	wire [ARCH_BITS-1:0] pcNext;
 	
 	//Instruction
 	wire [ARCH_BITS-1:0] instFetch;
+	wire instFetchValid;
+        wire [ARCH_BITS-1:0] instFetchToDecode;
 	reg [ARCH_BITS-1:0] instDecode;
 	
 	//Instruction decoded
@@ -48,7 +50,7 @@ module proc(input clk, input rst);
 	wire [4:0] dst;
 	wire [4:0] src1;
 	wire [4:0] src2;
-	wire [9:0] imm;
+	wire [20:0] imm;
 	wire [14:0] offset;
 	wire [4:0] offsetHi;
 	wire [4:0] offsetM;
@@ -62,6 +64,13 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] data1ALU;
 	wire [ARCH_BITS-1:0] data2Decode;
 	reg [ARCH_BITS-1:0] data2ALU;
+
+  //Memory
+  wire [proc.ARCH_BITS-1:0] memReadAddr;
+  wire [proc.MEMORY_LINE_BITS-1:0] memData;
+  wire memDataValid;
+  wire memReadReq;
+  wire memWriteDone; // Useless since writes are disabled
 	
 	always @(posedge clk) 
 	begin
@@ -71,15 +80,14 @@ module proc(input clk, input rst);
 			pc <= pcNext;
 	end
 	
-	assign pcNext = pc + 4;
+	assign pcNext = instFetchValid ? pc + 4 : pc;
 	
-	wire valid;
-	cache iCache(clk, rst, pc, 32'hffffffff, 32'hffffffff, 1'h0, instFetch, valid);
+	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, memReadAddr, memReadReq, memData, memDataValid);
+        assign instFetchToDecode = instFetchValid ? instFetch : OPCODE_NOP;
 	
 	always @(posedge clk)
 	begin
-		if(valid)
-			instDecode <= instFetch;
+    instDecode <= instFetchToDecode;
 	end
 
 	decoder dec(clk, rst, instDecode, opcodeDecode, dst, src1, src2, imm, offset, offsetHi, offsetM, offsetLo);
@@ -142,5 +150,9 @@ module proc(input clk, input rst);
 		opcodeWB <= opcodeALU;
 		wDataWB <= wDataALU;
 	end
-	
+
+  //Memory interface 
+  memory memInterface(clk, rst, memReadAddr, 32'hffffffff /*fakw write address*/, 128'hffffffffffffffffffffffffffffffff /*fake write data*/,
+                      1'b0 /*disable write*/, memData, memDataValid, memWriteDone);
+
 endmodule 
