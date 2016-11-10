@@ -48,9 +48,11 @@ module proc(input clk, input rst);
 	wire [6:0] opcodeDecode;
 	reg [6:0] opcodeALU;
 	reg [6:0] opcodeWB;
-	wire [4:0] dst;
-	wire [4:0] src1;
-	wire [4:0] src2;
+	wire [4:0] regDstDecode;
+  reg [4:0] regDstALU;
+  reg [4:0] regDstWB;
+	wire [4:0] regSrc1Decode;
+	wire [4:0] regSrc2Decode;
 	wire [20:0] imm;
 	wire [14:0] offset;
 	wire [4:0] offsetHi;
@@ -60,7 +62,7 @@ module proc(input clk, input rst);
 	//Operands
 	wire [ARCH_BITS-1:0] wDataALU;
 	reg [ARCH_BITS-1:0] wDataWB;
-	wire writeEnable;
+	wire writeEnableWB;
 	wire [ARCH_BITS-1:0] data1Decode;
 	reg [ARCH_BITS-1:0] data1ALU;
 	wire [ARCH_BITS-1:0] data2Decode;
@@ -91,17 +93,18 @@ module proc(input clk, input rst);
     instDecode <= instFetchToDecode;
 	end
 
-	decoder dec(clk, rst, instDecode, opcodeDecode, dst, src1, src2, imm, offset, offsetHi, offsetM, offsetLo);
+	decoder dec(clk, rst, instDecode, opcodeDecode, regDstDecode, regSrc1Decode, regSrc2Decode, imm, offset, offsetHi, offsetM, offsetLo);
 	
-	registerFile regs(clk, rst, src1, src2, dst, wDataWB, writeEnable, data1Decode, data2Decode);
+	registerFile regs(clk, rst, regSrc1Decode, regSrc2Decode, regDstWB, wDataWB, writeEnableWB, data1Decode, data2Decode);
 	
-	assign writeEnable = ((opcodeWB == OPCODE_ADD) || (opcodeWB == OPCODE_SUB) ||
-												(opcodeWB == OPCODE_MUL) || (opcodeWB == OPCODE_LDB) ||
-												(opcodeWB == OPCODE_LDW) || (opcodeWB == OPCODE_MOV));
+  assign writeEnableWB = ((opcodeWB == OPCODE_ADD) || (opcodeWB == OPCODE_SUB) ||
+                          (opcodeWB == OPCODE_MUL) || (opcodeWB == OPCODE_LDB) ||
+                          (opcodeWB == OPCODE_LDW) || (opcodeWB == OPCODE_MOV));
 	
 	always @(posedge clk)
 	begin
 		opcodeALU <= opcodeDecode;
+    regDstALU <= regDstDecode;
 		//R-type insts
 		if(opcodeDecode == OPCODE_ADD || opcodeDecode == OPCODE_SUB || 
 			 opcodeDecode == OPCODE_MUL)
@@ -149,11 +152,12 @@ module proc(input clk, input rst);
 	always @(posedge clk)
 	begin
 		opcodeWB <= opcodeALU;
+    regDstWB <= regDstALU;
 		wDataWB <= wDataALU;
 	end
 
   //Memory interface 
-  memory memInterface(clk, rst, memReadAddr, 32'hffffffff /*fakw write address*/, 128'hffffffffffffffffffffffffffffffff /*fake write data*/,
+  memory memInterface(clk, rst, memReadAddr, 32'hffffffff /*fake write address*/, 128'hffffffffffffffffffffffffffffffff /*fake write data*/,
                       1'b0 /*disable write*/, memData, memDataValid, memWriteDone);
 
 endmodule 
