@@ -25,6 +25,7 @@ module proc(input clk, input rst);
 							OPCODE_IRET			= 7'h33,
 							OPCODE_NOP			= 7'h7f;
 
+  parameter NOP_INSTRUCTION = 32'hFFFFFFFF;
 	
 	parameter VM_PAGE_SIZE	= 4096;
 	
@@ -75,7 +76,7 @@ module proc(input clk, input rst);
 	always @(posedge clk) 
 	begin
 		if(rst)
-			pc <= 32'h00001000;
+			pc <= PC_RST;
 		else
 			pc <= pcNext;
 	end
@@ -83,7 +84,7 @@ module proc(input clk, input rst);
 	assign pcNext = instFetchValid ? pc + 4 : pc;
 	
 	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, memReadAddr, memReadReq, memData, memDataValid);
-        assign instFetchToDecode = instFetchValid ? instFetch : OPCODE_NOP;
+        assign instFetchToDecode = instFetchValid ? instFetch : NOP_INSTRUCTION;
 	
 	always @(posedge clk)
 	begin
