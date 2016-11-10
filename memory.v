@@ -41,17 +41,19 @@ module memory(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [pro
     begin
       _readCnt  <= 3'b000;
       _writeCnt <= 3'b000;
+			_readAddr <= 32'h00000000;
+			_writeAddr <= 32'h00000000;
     end
     else
     begin
       // Writes
-      _writeCnt <= _writeCntNext;
+    	_writeCnt <= _writeCntNext;
+			_writeAddr <= wAddr;
       
       // Reads
-      _readCnt  <= _readCntNext;
+    	_readCnt  <= _readCntNext;
+    	_readAddr  <= rAddr;
     end
-    _readAddr  <= rAddr;
-    _writeAddr <= wAddr;
   end
 
   // Handle reads

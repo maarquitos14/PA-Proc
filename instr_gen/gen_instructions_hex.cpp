@@ -85,7 +85,7 @@ int main() {
                 instBin.set(i, offsetBin[i]);
         }
         //B-type instructions
-        else if(!opcode.compare("beq") || !opcode.compare("jump")) {
+        else if(!opcode.compare("beq") || !opcode.compare("jump") || !opcode.compare("bz")) {
             int offsetHi, src1, offsetM, offsetLo;
             std::cin >> offsetHi >> src1 >> offsetM >> offsetLo;
             if(!opcode.compare("beq")) {
@@ -93,8 +93,13 @@ int main() {
                 for(int i=0; i<7; i++)
                     instBin.set(i+25, opcodeBin[i]); 
             }
-            else {
+            else if(!opcode.compare("jump")) {
                 std::bitset<7> opcodeBin(49) ;
+                for(int i=0; i<7; i++)
+                    instBin.set(i+25, opcodeBin[i]); 
+            }
+            else {
+                std::bitset<7> opcodeBin(52) ;
                 for(int i=0; i<7; i++)
                     instBin.set(i+25, opcodeBin[i]); 
             }

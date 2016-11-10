@@ -23,6 +23,7 @@ module proc(input clk, input rst);
 							OPCODE_JUMP			= 7'h31,
 							OPCODE_TLBWRITE = 7'h32,
 							OPCODE_IRET			= 7'h33,
+							OPCODE_BZ				= 7'h34,
 							OPCODE_NOP			= 7'h7f;
 
   parameter NOP_INSTRUCTION = 32'hFFFFFFFF;
@@ -37,15 +38,19 @@ module proc(input clk, input rst);
 	//Program Counter
 	reg  [ARCH_BITS-1:0] pc;
 	wire [ARCH_BITS-1:0] pcNext;
+	reg [ARCH_BITS-1:0] pcDecode;
+	wire [ARCH_BITS-1:0] pcNextBranch;
+	wire takeBranch;
 	
 	//Instruction
 	wire [ARCH_BITS-1:0] instFetch;
 	wire instFetchValid;
-        wire [ARCH_BITS-1:0] instFetchToDecode;
+  wire [ARCH_BITS-1:0] instFetchToDecode;
 	reg [ARCH_BITS-1:0] instDecode;
 	
 	//Instruction decoded
 	wire [6:0] opcodeDecode;
+	wire [6:0] opcodeDecodeToALU;
 	reg [6:0] opcodeALU;
 	reg [6:0] opcodeWB;
 	wire [4:0] regDstDecode;
@@ -67,6 +72,8 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] data1ALU;
 	wire [ARCH_BITS-1:0] data2Decode;
 	reg [ARCH_BITS-1:0] data2ALU;
+	reg [ARCH_BITS-1:0] srcB1ALU;
+	reg [ARCH_BITS-1:0] srcB2ALU;
 
   //Memory
   wire [proc.ARCH_BITS-1:0] memReadAddr;
@@ -74,6 +81,9 @@ module proc(input clk, input rst);
   wire memDataValid;
   wire memReadReq;
   wire memWriteDone; // Useless since writes are disabled
+
+	wire [19:0] offset20;
+	wire [14:0] offset15;
 	
 	always @(posedge clk) 
 	begin
@@ -83,13 +93,15 @@ module proc(input clk, input rst);
 			pc <= pcNext;
 	end
 	
-	assign pcNext = instFetchValid ? pc + 4 : pc;
+	assign pcNext = takeBranch ? pcNextBranch : (instFetchValid ? pc + 4 : pc);
 	
 	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, memReadAddr, memReadReq, memData, memDataValid);
-        assign instFetchToDecode = instFetchValid ? instFetch : NOP_INSTRUCTION;
+  
+	assign instFetchToDecode = (takeBranch || !instFetchValid) ? NOP_INSTRUCTION : instFetch;
 	
 	always @(posedge clk)
 	begin
+		pcDecode <= pc;
     instDecode <= instFetchToDecode;
 	end
 
@@ -101,9 +113,17 @@ module proc(input clk, input rst);
                           (opcodeWB == OPCODE_MUL) || (opcodeWB == OPCODE_LDB) ||
                           (opcodeWB == OPCODE_LDW) || (opcodeWB == OPCODE_MOV));
 	
+	//Sign extension
+	//assign offset20Hi = ($signed(offsetHi) << 15);
+	//assign offset15Hi = ($signed(offsetHi) << 10);
+	assign offset20 = offset+(offsetHi<<15);
+	assign offset15 =	offsetLo+(offsetHi<<10);
+
+	assign opcodeDecodeToALU = takeBranch ? OPCODE_NOP : opcodeDecode;
+
 	always @(posedge clk)
 	begin
-		opcodeALU <= opcodeDecode;
+		opcodeALU <= opcodeDecodeToALU;
     regDstALU <= regDstDecode;
 		//R-type insts
 		if(opcodeDecode == OPCODE_ADD || opcodeDecode == OPCODE_SUB || 
@@ -130,14 +150,26 @@ module proc(input clk, input rst);
 			data2ALU <= 0;
 		end
 		//B-type insts
-		else if (opcodeDecode == OPCODE_BEQ || opcodeDecode == OPCODE_JUMP)
-		begin:btype
-			reg [20:0] offsetTotal;
+		else if (opcodeDecode == OPCODE_BEQ)
+		begin
+			data1ALU <= pcDecode;
+			data2ALU <= $signed(offset15);
+			srcB1ALU <= data1Decode;
+			srcB2ALU <= data2Decode;
+		end
+		else if (opcodeDecode == OPCODE_BZ)
+		begin
+			data1ALU <= pcDecode;
+			data2ALU <= $signed(offset20);
+			srcB1ALU <= data1Decode;
+			srcB2ALU <= 0;
+		end 
+		else if (opcodeDecode == OPCODE_JUMP)
+		begin
 			data1ALU <= data1Decode;
-			offsetTotal <= offsetHi << 15;
-			offsetTotal <= offsetTotal + offsetM << 10;
-			offsetTotal <= offsetTotal + offsetLo;
-			data2ALU <= offsetTotal;
+			data2ALU <= $signed(offset20);
+			srcB1ALU <= 0;
+			srcB2ALU <= 0;
 		end
 		//NOP
 		else
@@ -148,11 +180,14 @@ module proc(input clk, input rst);
 	end
 	
 	alu alu0(clk, rst, opcodeALU, data1ALU, data2ALU, wDataALU);
+	assign pcNextBranch = wDataALU;
+	assign takeBranch = ((srcB1ALU == srcB2ALU) && (opcodeALU == OPCODE_BEQ || 
+												opcodeALU == OPCODE_BZ || opcodeALU == OPCODE_JUMP));
 	
 	always @(posedge clk)
 	begin
-		opcodeWB <= opcodeALU;
-    regDstWB <= regDstALU;
+		opcodeWB <= takeBranch ? OPCODE_NOP : opcodeALU;
+	  regDstWB <= regDstALU;
 		wDataWB <= wDataALU;
 	end
 
