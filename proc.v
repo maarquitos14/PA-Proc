@@ -52,6 +52,7 @@ module proc(input clk, input rst);
 	wire [6:0] opcodeDecode;
 	wire [6:0] opcodeDecodeToALU;
 	reg [6:0] opcodeALU;
+	wire [6:0] opcodeALUToWB;
 	reg [6:0] opcodeWB;
 	wire [4:0] regDstDecode;
   reg [4:0] regDstALU;
@@ -97,7 +98,7 @@ module proc(input clk, input rst);
 	
 	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, memReadAddr, memReadReq, memData, memDataValid);
   
-	assign instFetchToDecode = (takeBranch || !instFetchValid) ? NOP_INSTRUCTION : instFetch;
+	assign instFetchToDecode = (takeBranch || !instFetchValid || rst) ? NOP_INSTRUCTION : instFetch;
 	
 	always @(posedge clk)
 	begin
@@ -119,7 +120,7 @@ module proc(input clk, input rst);
 	assign offset20 = offset+(offsetHi<<15);
 	assign offset15 =	offsetLo+(offsetHi<<10);
 
-	assign opcodeDecodeToALU = takeBranch ? OPCODE_NOP : opcodeDecode;
+	assign opcodeDecodeToALU = (takeBranch || rst) ? OPCODE_NOP : opcodeDecode;
 
 	always @(posedge clk)
 	begin
@@ -183,10 +184,12 @@ module proc(input clk, input rst);
 	assign pcNextBranch = wDataALU;
 	assign takeBranch = ((srcB1ALU == srcB2ALU) && (opcodeALU == OPCODE_BEQ || 
 												opcodeALU == OPCODE_BZ || opcodeALU == OPCODE_JUMP));
-	
+
+	assign opcodeALUToWB = (takeBranch || rst) ? OPCODE_NOP : opcodeALU;
+
 	always @(posedge clk)
 	begin
-		opcodeWB <= takeBranch ? OPCODE_NOP : opcodeALU;
+		opcodeWB <= opcodeALUToWB;
 	  regDstWB <= regDstALU;
 		wDataWB <= wDataALU;
 	end
