@@ -13,7 +13,12 @@ module registerFile(input clk, input rst, input [4:0] src1, input [4:0] src2,
 			for( i = 0; i < NUM_REGS; i=i+1 ) 
 				registers[i] = i;
 		end
-		if (writeEnable)
+
+	end
+
+	always @(negedge clk)
+	begin
+		if (writeEnable && !rst)
 			registers[dst] <= wData;
 	end
 	

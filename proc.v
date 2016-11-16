@@ -38,53 +38,103 @@ module proc(input clk, input rst);
 	//Program Counter
 	reg  [ARCH_BITS-1:0] pc;
 	wire [ARCH_BITS-1:0] pcNext;
-	reg [ARCH_BITS-1:0] pcDecode;
 	wire [ARCH_BITS-1:0] pcNextBranch;
 	wire takeBranch;
-	
-	//Instruction
+
+  //Fetch stage
 	wire [ARCH_BITS-1:0] instFetch;
 	wire instFetchValid;
   wire [ARCH_BITS-1:0] instFetchToDecode;
+
+  //Decode stage
+	reg [ARCH_BITS-1:0] pcDecode;
 	reg [ARCH_BITS-1:0] instDecode;
+	wire [14:0] offset;
+	wire [4:0] offsetHi;
+	wire [4:0] offsetM;
+	wire [9:0] offsetLo;
+	wire [19:0] offset20;
+	wire [14:0] offset15;
+	wire [20:0] imm;
+	wire [ARCH_BITS-1:0] data1Decode;
+	wire [ARCH_BITS-1:0] data2Decode;
+	wire [4:0] regSrc1Decode;
+	wire [4:0] regSrc2Decode;
+	wire [4:0] regDstDecode;
+	wire [ARCH_BITS-1:0] pcDecodeToALU;
+	wire [14:0] offsetDecodeToALU;
+	wire [19:0] offset20DecodeToALU;
+	wire [14:0] offset15DecodeToALU;
+	wire [20:0] immDecodeToALU;
+	wire [ARCH_BITS-1:0] data1DecodeToALU;
+	wire [ARCH_BITS-1:0] data2DecodeToALU;
+	wire [4:0] regDstDecodeToALU;
+
+  //ALU stage
+  reg [4:0] regDstALU;
+	wire [ARCH_BITS-1:0] wDataALU;
+	reg [ARCH_BITS-1:0] data1ALU;
+	reg [ARCH_BITS-1:0] data2ALU;
+	reg [ARCH_BITS-1:0] srcB1ALU;
+	reg [ARCH_BITS-1:0] srcB2ALU;
+  wire [4:0] regDstALUToDCache;
+	wire [ARCH_BITS-1:0] wDataALUToDCache;
+	wire [ARCH_BITS-1:0] srcB2ALUToDCache;
 	
 	//Instruction decoded
 	wire [6:0] opcodeDecode;
 	wire [6:0] opcodeDecodeToALU;
 	reg [6:0] opcodeALU;
-	wire [6:0] opcodeALUToWB;
+	wire [6:0] opcodeALUToDCache;
+	reg [6:0] opcodeDCache;
+	wire [6:0] opcodeDCacheToWB;
 	reg [6:0] opcodeWB;
-	wire [4:0] regDstDecode;
-  reg [4:0] regDstALU;
   reg [4:0] regDstWB;
-	wire [4:0] regSrc1Decode;
-	wire [4:0] regSrc2Decode;
-	wire [20:0] imm;
-	wire [14:0] offset;
-	wire [4:0] offsetHi;
-	wire [4:0] offsetM;
-	wire [9:0] offsetLo;
+	wire [4:0] regSrc1;
+	wire [4:0] regSrc2;
 	
 	//Operands
-	wire [ARCH_BITS-1:0] wDataALU;
 	reg [ARCH_BITS-1:0] wDataWB;
 	wire writeEnableWB;
-	wire [ARCH_BITS-1:0] data1Decode;
-	reg [ARCH_BITS-1:0] data1ALU;
-	wire [ARCH_BITS-1:0] data2Decode;
-	reg [ARCH_BITS-1:0] data2ALU;
-	reg [ARCH_BITS-1:0] srcB1ALU;
-	reg [ARCH_BITS-1:0] srcB2ALU;
 
   //Memory
-  wire [proc.ARCH_BITS-1:0] memReadAddr;
-  wire [proc.MEMORY_LINE_BITS-1:0] memData;
+  wire [ARCH_BITS-1:0] memReadAddr;
+  wire [MEMORY_LINE_BITS-1:0] memData;
   wire memDataValid;
-  wire memReadReq;
-  wire memWriteDone; // Useless since writes are disabled
+  //wire memReadReq;
+  //wire memWriteDone; // Useless since writes are disabled
+	wire [3:0] memStateNext;
+	reg [3:0] memState;
 
-	wire [19:0] offset20;
-	wire [14:0] offset15;
+	//ICache
+	wire [ARCH_BITS-1:0] readMemAddrICache;
+	wire readMemReqICache;
+	wire readMemDataValidICache;
+
+	//DCache
+	reg [ARCH_BITS-1:0] dCacheAddr;
+	wire [ARCH_BITS-1:0] addrALUToDCache;
+	reg [ARCH_BITS-1:0] wDataDCache;
+	reg [ARCH_BITS-1:0] regDstDCache;
+	wire WEDCache;
+	wire REDCache;
+	wire [ARCH_BITS-1:0] wDataDCacheToWB;
+	wire [ARCH_BITS-1:0] rDataDCache;
+	wire rValidDCache;
+	wire [ARCH_BITS-1:0] readMemAddrDCache;
+	wire readMemReqDCache;
+	wire readMemDataValidDCache;
+	wire [ARCH_BITS-1:0] writeMemAddrDCache;
+	wire [MEMORY_LINE_BITS-1:0] writeMemLineDCache;
+	wire writeMemReqDCache;
+	wire memoryStallDCache;
+	wire [ARCH_BITS-1:0] regDstDCacheToWB;
+	wire wAck;
+
+	//stall
+	wire stallDecodeToALU;
+	wire stallALUToDCache;
+	wire stallDCacheToWB;
 	
 	always @(posedge clk) 
 	begin
@@ -94,108 +144,214 @@ module proc(input clk, input rst);
 			pc <= pcNext;
 	end
 	
-	assign pcNext = takeBranch ? pcNextBranch : (instFetchValid ? pc + 4 : pc);
+	assign pcNext = memoryStallDCache ? pc : 
+									(takeBranch ? pcNextBranch : (instFetchValid ? pc+4 : pc)); 
 	
-	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, memReadAddr, memReadReq, memData, memDataValid);
+	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memData, readMemDataValidICache);
   
-	assign instFetchToDecode = (takeBranch || !instFetchValid || rst) ? NOP_INSTRUCTION : instFetch;
+	assign instFetchToDecode = memoryStallDCache ? instDecode : 
+														 (takeBranch || !instFetchValid) ? NOP_INSTRUCTION : instFetch;
 	
 	always @(posedge clk)
 	begin
 		pcDecode <= pc;
-    instDecode <= instFetchToDecode;
+		if (rst)
+		begin
+			instDecode <= NOP_INSTRUCTION;
+		end
+		else
+		begin
+	    instDecode <= instFetchToDecode;
+		end
 	end
 
 	decoder dec(clk, rst, instDecode, opcodeDecode, regDstDecode, regSrc1Decode, regSrc2Decode, imm, offset, offsetHi, offsetM, offsetLo);
 	
-	registerFile regs(clk, rst, regSrc1Decode, regSrc2Decode, regDstWB, wDataWB, writeEnableWB, data1Decode, data2Decode);
+	assign regSrc1 = regSrc1Decode;
+	assign regSrc2 = (opcodeDecode == OPCODE_STB || opcodeDecode == OPCODE_STW) ?
+									regDstDecode : regSrc2Decode;
+	
+	registerFile regs(clk, rst, regSrc1, regSrc2, regDstWB, wDataWB, writeEnableWB, data1Decode, data2Decode);
 	
   assign writeEnableWB = ((opcodeWB == OPCODE_ADD) || (opcodeWB == OPCODE_SUB) ||
                           (opcodeWB == OPCODE_MUL) || (opcodeWB == OPCODE_LDB) ||
                           (opcodeWB == OPCODE_LDW) || (opcodeWB == OPCODE_MOV));
 	
-	//Sign extension
-	//assign offset20Hi = ($signed(offsetHi) << 15);
-	//assign offset15Hi = ($signed(offsetHi) << 10);
 	assign offset20 = offset+(offsetHi<<15);
 	assign offset15 =	offsetLo+(offsetHi<<10);
 
-	assign opcodeDecodeToALU = (takeBranch || rst) ? OPCODE_NOP : opcodeDecode;
+  assign stallDecodeToALU = memoryStallDCache;
+	assign opcodeDecodeToALU = (stallDecodeToALU ? opcodeALU :
+                              (takeBranch ? OPCODE_NOP : opcodeDecode));
+  assign regDstDecodeToALU = stallDecodeToALU ? regDstALU : regDstDecode;
+  assign data1DecodeToALU = stallDecodeToALU ? srcB1ALU : data1Decode;
+  assign data2DecodeToALU = stallDecodeToALU ? srcB2ALU : data2Decode;
+  assign offsetDecodeToALU = stallDecodeToALU ? data2ALU : offset;
+  assign immDecodeToALU = stallDecodeToALU ? data1ALU : imm;
+  assign pcDecodeToALU = stallDecodeToALU ? data1ALU : pcDecode;
+  assign offset15DecodeToALU = stallDecodeToALU ? data2ALU : offset15;
+  assign offset20DecodeToALU = stallDecodeToALU ? data2ALU : offset20;
 
 	always @(posedge clk)
 	begin
-		opcodeALU <= opcodeDecodeToALU;
-    regDstALU <= regDstDecode;
-		//R-type insts
-		if(opcodeDecode == OPCODE_ADD || opcodeDecode == OPCODE_SUB || 
-			 opcodeDecode == OPCODE_MUL)
+//    if (!stallDecodeToALU || rst)
+//    begin
+		if (rst)
 		begin
-			data1ALU = data1Decode;
-			data2ALU = data2Decode;
+			opcodeALU <= OPCODE_NOP;
 		end
-		//M-type insts
-		else if(opcodeDecode == OPCODE_LDB || opcodeDecode == OPCODE_LDW || 
-						opcodeDecode == OPCODE_STB || opcodeDecode == OPCODE_STW)
-		begin
-			data1ALU <= data1Decode;
-			data2ALU <= offset;
-		end
-		else if (opcodeDecode == OPCODE_MOV)
-		begin
-			data1ALU <= data1Decode;
-			data2ALU <= 0;
-		end
-		else if (opcodeDecode == OPCODE_MOVI)
-		begin
-			data1ALU <= imm;
-			data2ALU <= 0;
-		end
-		//B-type insts
-		else if (opcodeDecode == OPCODE_BEQ)
-		begin
-			data1ALU <= pcDecode;
-			data2ALU <= $signed(offset15);
-			srcB1ALU <= data1Decode;
-			srcB2ALU <= data2Decode;
-		end
-		else if (opcodeDecode == OPCODE_BZ)
-		begin
-			data1ALU <= pcDecode;
-			data2ALU <= $signed(offset20);
-			srcB1ALU <= data1Decode;
-			srcB2ALU <= 0;
-		end 
-		else if (opcodeDecode == OPCODE_JUMP)
-		begin
-			data1ALU <= data1Decode;
-			data2ALU <= $signed(offset20);
-			srcB1ALU <= 0;
-			srcB2ALU <= 0;
-		end
-		//NOP
 		else
 		begin
-			data1ALU <= 32'hffffffff;
-			data2ALU <= 32'hffffffff;
+			opcodeALU <= opcodeDecodeToALU;
 		end
+		  regDstALU <= regDstDecodeToALU;
+			srcB1ALU <= data1DecodeToALU;
+			srcB2ALU <= data2DecodeToALU;
+			//R-type insts
+			if(opcodeDecodeToALU == OPCODE_ADD || opcodeDecodeToALU == OPCODE_SUB || 
+				 opcodeDecodeToALU == OPCODE_MUL)
+			begin
+				data1ALU = data1DecodeToALU;
+				data2ALU = data2DecodeToALU;
+			end
+			//M-type insts
+			else if(opcodeDecodeToALU == OPCODE_LDB || opcodeDecodeToALU == OPCODE_LDW || 
+							opcodeDecodeToALU == OPCODE_STB || opcodeDecodeToALU == OPCODE_STW)
+			begin
+				data1ALU <= data1DecodeToALU;
+				data2ALU <= offsetDecodeToALU;
+			end
+			else if (opcodeDecodeToALU == OPCODE_MOV)
+			begin
+				data1ALU <= data1DecodeToALU;
+				data2ALU <= 0;
+			end
+			else if (opcodeDecodeToALU == OPCODE_MOVI)
+			begin
+				data1ALU <= immDecodeToALU;
+				data2ALU <= 0;
+			end
+			//B-type insts
+			else if (opcodeDecodeToALU == OPCODE_BEQ)
+			begin
+				data1ALU <= pcDecodeToALU;
+				data2ALU <= $signed(offset15DecodeToALU);
+			end
+			else if (opcodeDecodeToALU == OPCODE_BZ)
+			begin
+				data1ALU <= pcDecodeToALU;
+				data2ALU <= $signed(offset20DecodeToALU);
+			end 
+			else if (opcodeDecodeToALU == OPCODE_JUMP)
+			begin
+				data1ALU <= data1DecodeToALU;
+				data2ALU <= $signed(offset20DecodeToALU);
+			end
+			//NOP
+			else
+			begin
+				data1ALU <= 32'hffffffff;
+				data2ALU <= 32'hffffffff;
+			end
+//    end
 	end
 	
 	alu alu0(clk, rst, opcodeALU, data1ALU, data2ALU, wDataALU);
 	assign pcNextBranch = wDataALU;
-	assign takeBranch = ((srcB1ALU == srcB2ALU) && (opcodeALU == OPCODE_BEQ || 
-												opcodeALU == OPCODE_BZ || opcodeALU == OPCODE_JUMP));
+	assign takeBranch = ((opcodeALU == OPCODE_JUMP) || 
+											 ((opcodeALU == OPCODE_BEQ) && (srcB1ALU == srcB2ALU)) ||
+											 ((opcodeALU == OPCODE_BZ) && (srcB1ALU == 0)));
 
-	assign opcodeALUToWB = (takeBranch || rst) ? OPCODE_NOP : opcodeALU;
+	assign stallALUToDCache = memoryStallDCache;
+//	assign opcodeALUToDCache = (takeBranch || rst) ? OPCODE_NOP;
+	assign opcodeALUToDCache = stallALUToDCache ? opcodeDCache : opcodeALU;
+	assign wDataALUToDCache = stallALUToDCache ? dCacheAddr : wDataALU;
+  assign srcB2ALUToDCache = stallALUToDCache ? wDataDCache : srcB2ALU;
+	assign regDstALUToDCache = stallALUToDCache ? regDstDCache : regDstALU;
 
 	always @(posedge clk)
 	begin
-		opcodeWB <= opcodeALUToWB;
-	  regDstWB <= regDstALU;
-		wDataWB <= wDataALU;
+//		if(!stallALUToDCache || rst)
+//		begin
+		if (rst)
+		begin
+			opcodeDCache <= OPCODE_NOP;
+		end
+		else
+		begin
+			opcodeDCache <= opcodeALUToDCache;
+		end
+			dCacheAddr <= wDataALUToDCache;
+			wDataDCache <= srcB2ALUToDCache;
+			regDstDCache <= regDstALUToDCache;
+//		end
+	end
+
+	assign WEDCache = ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW));
+	assign REDCache = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW));
+
+	cache dCache(clk, rst, dCacheAddr, dCacheAddr, wDataDCache, WEDCache, wAck, REDCache, rDataDCache, 
+							 rValidDCache, readMemAddrDCache, readMemReqDCache, memData, readMemDataValidDCache, 
+							 writeMemAddrDCache, writeMemLineDCache, writeMemReqDCache, memWriteDone);
+
+	assign stallDCacheToWB = memoryStallDCache;
+	assign opcodeDCacheToWB = stallDCacheToWB ? OPCODE_NOP : opcodeDCache;
+	assign wDataDCacheToWB = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) ? 
+														rDataDCache : dCacheAddr;
+	assign regDstDCacheToWB = stallDCacheToWB ? regDstWB : regDstDCache;
+
+	// If cache miss, stall.
+	assign memoryStallDCache = (((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && 
+ 															!rValidDCache) || (!wAck && 
+															((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW)));
+
+	always @(posedge clk)
+	begin
+//		if(!stallDCacheToWB || rst)
+//		begin
+		if (rst)
+		begin
+		opcodeWB <= OPCODE_NOP;
+		end
+		else
+		begin
+			opcodeWB <= opcodeDCacheToWB;
+		end
+		  regDstWB <= regDstDCacheToWB;
+			wDataWB <= wDataDCacheToWB;
+//		end
 	end
 
   //Memory interface 
-  memory memInterface(clk, rst, memReadAddr, 32'hffffffff /*fake write address*/, 128'hffffffffffffffffffffffffffffffff /*fake write data*/,
-                      1'b0 /*disable write*/, memData, memDataValid, memWriteDone);
+  memory memInterface(clk, rst, memReadAddr, writeMemAddrDCache, writeMemLineDCache,
+                      writeMemReqDCache, memData, memDataValid, memWriteDone);
+
+												//if mem state is 0 and reqDCache -> 1
+												//if mem state is 0 and reqICache -> 5
+												//if mem state is 0 and no reqs -> 0
+												//if mem state is 1 or 5 -> memstate+memdatavalid.
+												//otherwise -> 0
+	assign memStateNext =	memState == 0 ? 
+												(readMemReqICache ? 5 : (readMemReqDCache ? 1 : memState)) : 
+												((memState == 1 || memState == 5) ? memState+memDataValid :
+                    		0);
+
+	assign memReadAddr = memState == 1 ? readMemAddrDCache : readMemAddrICache;
+	assign readMemDataValidICache = ((memState == 6) && memDataValid) ||
+                                  ((memState == 5) && memDataValid);
+	assign readMemDataValidDCache = ((memState == 2) && memDataValid) ||
+                                  ((memState == 1) && memDataValid);
+
+	always @(posedge clk)
+	begin
+		if (rst)
+		begin
+			memState <= 0;
+		end
+		else
+		begin
+			memState <= memStateNext;
+		end
+	end
 
 endmodule 
