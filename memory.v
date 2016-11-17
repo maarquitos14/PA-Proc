@@ -34,25 +34,25 @@ module memory(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [pro
   assign _readReady    = (_readCnt  == DELAY_READ_CYCLES  && _readAddr  == rAddr);
   assign _writeReady   = (_writeCnt == DELAY_WRITE_CYCLES && _writeAddr == wAddr);
   assign _readCntNext  = (_readAddr == rAddr) ? (_readCnt + !_readReady) : 3'b000;
-  assign _writeCntNext = (WE && _writeAddr == wAddr) ? (_writeCnt + !_writeReady) : 3'b000;
+  assign _writeCntNext = (!WE || _writeAddr != wAddr) ? 3'b000 : (_writeCnt + !_writeReady);
   always @(posedge clk) 
   begin
     if(rst)
     begin
       _readCnt  <= 3'b000;
       _writeCnt <= 3'b000;
-			_readAddr <= 32'h00000000;
-			_writeAddr <= 32'h00000000;
+      _readAddr <= 32'h00000000;
+      _writeAddr <= 32'h00000000;
     end
     else
     begin
       // Writes
-    	_writeCnt <= _writeCntNext;
-			_writeAddr <= wAddr;
+      _writeCnt  <= _writeCntNext;
+      _writeAddr <= wAddr;
       
       // Reads
-    	_readCnt  <= _readCntNext;
-    	_readAddr  <= rAddr;
+      _readCnt  <= _readCntNext;
+      _readAddr <= rAddr;
     end
   end
 
