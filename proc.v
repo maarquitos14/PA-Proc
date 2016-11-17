@@ -97,17 +97,9 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] wDataWB;
 	wire writeEnableWB;
 
-  //Memory
-  wire [ARCH_BITS-1:0] memReadAddr;
-  wire [MEMORY_LINE_BITS-1:0] memData;
-  wire memDataValid;
-  //wire memReadReq;
-  //wire memWriteDone; // Useless since writes are disabled
-	wire [3:0] memStateNext;
-	reg [3:0] memState;
-
 	//ICache
 	wire [ARCH_BITS-1:0] readMemAddrICache;
+  wire [MEMORY_LINE_BITS-1:0] memDataICache;
 	wire readMemReqICache;
 	wire readMemDataValidICache;
 
@@ -122,6 +114,7 @@ module proc(input clk, input rst);
 	wire [ARCH_BITS-1:0] rDataDCache;
 	wire rValidDCache;
 	wire [ARCH_BITS-1:0] readMemAddrDCache;
+  wire [MEMORY_LINE_BITS-1:0] memDataDCache;
 	wire readMemReqDCache;
 	wire readMemDataValidDCache;
 	wire [ARCH_BITS-1:0] writeMemAddrDCache;
@@ -147,7 +140,7 @@ module proc(input clk, input rst);
 	assign pcNext = memoryStallDCache ? pc : 
 									(takeBranch ? pcNextBranch : (instFetchValid ? pc+4 : pc)); 
 	
-	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memData, readMemDataValidICache);
+	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache);
   
 	assign instFetchToDecode = memoryStallDCache ? instDecode : 
 														 (takeBranch || !instFetchValid) ? NOP_INSTRUCTION : instFetch;
@@ -291,7 +284,7 @@ module proc(input clk, input rst);
 	assign REDCache = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW));
 
 	cache dCache(clk, rst, dCacheAddr, dCacheAddr, wDataDCache, WEDCache, wAck, REDCache, rDataDCache, 
-							 rValidDCache, readMemAddrDCache, readMemReqDCache, memData, readMemDataValidDCache, 
+							 rValidDCache, readMemAddrDCache, readMemReqDCache, memDataDCache, readMemDataValidDCache, 
 							 writeMemAddrDCache, writeMemLineDCache, writeMemReqDCache, memWriteDone);
 
 	assign stallDCacheToWB = memoryStallDCache;
@@ -323,35 +316,9 @@ module proc(input clk, input rst);
 	end
 
   //Memory interface 
-  memory memInterface(clk, rst, memReadAddr, writeMemAddrDCache, writeMemLineDCache,
-                      writeMemReqDCache, memData, memDataValid, memWriteDone);
-
-												//if mem state is 0 and reqDCache -> 1
-												//if mem state is 0 and reqICache -> 5
-												//if mem state is 0 and no reqs -> 0
-												//if mem state is 1 or 5 -> memstate+memdatavalid.
-												//otherwise -> 0
-	assign memStateNext =	memState == 0 ? 
-												(readMemReqICache ? 5 : (readMemReqDCache ? 1 : memState)) : 
-												((memState == 1 || memState == 5) ? memState+memDataValid :
-                    		0);
-
-	assign memReadAddr = memState == 1 ? readMemAddrDCache : readMemAddrICache;
-	assign readMemDataValidICache = ((memState == 6) && memDataValid) ||
-                                  ((memState == 5) && memDataValid);
-	assign readMemDataValidDCache = ((memState == 2) && memDataValid) ||
-                                  ((memState == 1) && memDataValid);
-
-	always @(posedge clk)
-	begin
-		if (rst)
-		begin
-			memState <= 0;
-		end
-		else
-		begin
-			memState <= memStateNext;
-		end
-	end
+  memory memInterface(clk, rst,
+                      readMemAddrDCache, readMemReqDCache, memDataDCache, readMemDataValidDCache,
+                      readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache,
+                      writeMemAddrDCache, writeMemReqDCache, writeMemLineDCache, memWriteDone);
 
 endmodule 
