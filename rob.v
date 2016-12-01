@@ -1,30 +1,33 @@
 module rob(input clk, input rst, input clear,
            /* Input port1 */
-           input valid1, input [3:0]robIdx1, input except1, input [proc.ARCH_BITS-1:0]pc1,
-           input [proc.ARCH_BITS-1:0]address1, input [proc.ARCH_BITS-1:0]data1, input [4:0]dst1, input we1,
+           input valid1, input [proc.ROB_IDX_BITS-1:0]robIdx1, input except1, input [proc.ARCH_BITS-1:0]pc1,
+           input [proc.ARCH_BITS-1:0]address1, input [proc.ARCH_BITS-1:0]data1, input [proc.REG_IDX_BITS-1:0]dst1, input we1,
+           /* Input port2 */
+           input valid2, input [proc.ROB_IDX_BITS-1:0]robIdx2, input except2, input [proc.ARCH_BITS-1:0]pc2,
+           input [proc.ARCH_BITS-1:0]address2, input [proc.ARCH_BITS-1:0]data2, input [proc.REG_IDX_BITS-1:0]dst2, input we2,
+           /* Input port3 */
+           input valid3, input [proc.ROB_IDX_BITS-1:0]robIdx3, input except3, input [proc.ARCH_BITS-1:0]pc3,
+           input [proc.ARCH_BITS-1:0]address3, input [proc.ARCH_BITS-1:0]data3, input [proc.REG_IDX_BITS-1:0]dst3, input we3,
            /* Output to generate exceptions */
            output except, output [proc.ARCH_BITS-1:0]address, output [proc.ARCH_BITS-1:0]pc,
            /* Output to register file */
-           output [4:0]wDstReg, output [proc.ARCH_BITS-1:0] wData, output wEnable);
+           output [proc.REG_IDX_BITS-1:0]wDstReg, output [proc.ARCH_BITS-1:0] wData, output wEnable);
 
-  parameter ROB_POSITIONS = 16;
-  parameter ROB_IDX_BITS = 4;
+  reg _validBits[proc.ROB_SLOTS-1:0];
+  reg _exceptBits[proc.ROB_SLOTS-1:0];
+  reg _weBits[proc.ROB_SLOTS-1:0];
+  reg [proc.ARCH_BITS-1:0] _address[proc.ROB_SLOTS-1:0];
+  reg [proc.ARCH_BITS-1:0] _pc[proc.ROB_SLOTS-1:0];
+  reg [proc.ARCH_BITS-1:0] _wData[proc.ROB_SLOTS-1:0];
+  reg [proc.REG_IDX_BITS-1:0] _wDstReg[proc.ROB_SLOTS-1:0];
 
-  reg _validBits[ROB_POSITIONS-1:0];
-  reg _exceptBits[ROB_POSITIONS-1:0];
-  reg _weBits[ROB_POSITIONS-1:0];
-  reg [proc.ARCH_BITS-1:0] _address[ROB_POSITIONS-1:0];
-  reg [proc.ARCH_BITS-1:0] _pc[ROB_POSITIONS-1:0];
-  reg [proc.ARCH_BITS-1:0] _wData[ROB_POSITIONS-1:0];
-  reg [4:0] _wDstReg[ROB_POSITIONS-1:0];
-
-  reg [ROB_IDX_BITS-1:0]_headIdx;
-  wire [ROB_IDX_BITS-1:0]_headIdxNext;
+  reg [proc.ROB_IDX_BITS-1:0]_headIdx;
+  wire [proc.ROB_IDX_BITS-1:0]_headIdxNext;
   wire _validHead;
 	integer i;
 
   assign _validHead = _validBits[_headIdx];
-  assign _headIdxNext = _validHead ? ( (_headIdx + 1)%ROB_POSITIONS ) : _headIdx;
+  assign _headIdxNext = _validHead ? ( (_headIdx + 1)%proc.ROB_SLOTS ) : _headIdx;
 
   /* Set outputs */
   assign except = _validHead ? _exceptBits[_headIdx] : 0'b0;
@@ -42,7 +45,7 @@ module rob(input clk, input rst, input clear,
     begin
       // Clean the memory
       _headIdx <= 4'b0000;
-      for( i = 0; i < ROB_POSITIONS; i=i+1 ) 
+      for( i = 0; i < proc.ROB_SLOTS; i=i+1 ) 
 			begin
 				_validBits[i] = 1'b0;
 			end
@@ -68,6 +71,44 @@ module rob(input clk, input rst, input clear,
         _pc        [robIdx1] <= pc1;
         _wData     [robIdx1] <= data1;
         _wDstReg   [robIdx1] <= dst1;
+      end
+    end
+  end
+
+	// Handle data from port2
+  always @(posedge clk) 
+  begin
+    if(!rst)
+    begin
+      // Don't merge with reset condition. The reset allways will have a value and valid2 not
+      if (valid2)
+      begin
+        _validBits [robIdx2] <= 1'b1;
+        _exceptBits[robIdx2] <= except2;
+        _weBits    [robIdx2] <= we2;
+        _address   [robIdx2] <= address2;
+        _pc        [robIdx2] <= pc2;
+        _wData     [robIdx2] <= data2;
+        _wDstReg   [robIdx2] <= dst2;
+      end
+    end
+  end
+
+	// Handle data from port3
+  always @(posedge clk) 
+  begin
+    if(!rst)
+    begin
+      // Don't merge with reset condition. The reset allways will have a value and valid3 not
+      if (valid3)
+      begin
+        _validBits [robIdx3] <= 1'b1;
+        _exceptBits[robIdx3] <= except3;
+        _weBits    [robIdx3] <= we3;
+        _address   [robIdx3] <= address3;
+        _pc        [robIdx3] <= pc3;
+        _wData     [robIdx3] <= data3;
+        _wDstReg   [robIdx3] <= dst3;
       end
     end
   end
