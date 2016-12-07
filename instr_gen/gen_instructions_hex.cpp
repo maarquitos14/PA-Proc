@@ -45,10 +45,10 @@ int main() {
             std::cin >> dst >> src1 >> offset;
             if(!opcode.compare("ldb")) {
                 std::bitset<7> opcodeBin(16) ;
-                std::cout << "opcodeBin: " << opcodeBin.to_string() << std::endl;;
+                //std::cout << "opcodeBin: " << opcodeBin.to_string() << std::endl;;
                 for(int i=0; i<7; i++)
                     instBin.set(i+25, opcodeBin[i]); 
-                std::cout << "instBin: " << instBin.to_string() << std::endl;;
+                //std::cout << "instBin: " << instBin.to_string() << std::endl;;
             }
             else if(!opcode.compare("ldw")) {
                 std::bitset<7> opcodeBin(17) ;

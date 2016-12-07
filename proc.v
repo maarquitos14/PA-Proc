@@ -4,7 +4,8 @@ module proc(input clk, input rst);
 
 	// Architecture constants
   parameter ARCH_BITS        = 32,  // MODYFING ARCH_BITS AFFECTS CACHE CONSTANTS
-            MEMORY_LINE_BITS = 128,
+						BYTE_BITS				 = 8,            
+						MEMORY_LINE_BITS = 128,
             OPCODE_BITS      = 7,
             REG_IDX_BITS     = 5,
             ROB_IDX_BITS     = 4,   // MODIFING ROB_BID_BITS AFFECTS THE NUMBER OF ROB SLOTS
@@ -88,6 +89,10 @@ module proc(input clk, input rst);
   wire [REG_IDX_BITS-1:0] regDstALUToDCache;
 	wire [ARCH_BITS-1:0] wDataALUToDCache;
 	wire [ARCH_BITS-1:0] srcB2ALUToDCache;
+	wire [ARCH_BITS-1:0] srcB2ALUByte;
+	wire [ARCH_BITS-1:0] srcB2ALUStore;
+  wire [ROB_IDX_BITS-1:0] robIdxALUToDCache;
+  wire [ARCH_BITS-1:0] pcALUToDCache;
   reg  [ROB_IDX_BITS-1:0] robIdxALU;
   reg  [ARCH_BITS-1:0] pcALU;
   wire valid_aluToROB;
@@ -119,15 +124,16 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] regDstDCache;
 	wire WEDCache;
 	wire REDCache;
+	wire [ARCH_BITS-1:0] rDataDCacheByte;
 	wire [ARCH_BITS-1:0] rDataDCache;
 	wire rValidDCache;
 	wire [ARCH_BITS-1:0] readMemAddrDCache;
   wire [MEMORY_LINE_BITS-1:0] memDataDCache;
 	wire readMemReqDCache;
 	wire readMemDataValidDCache;
-	wire [ARCH_BITS-1:0] writeMemAddrDCache;
-	wire [MEMORY_LINE_BITS-1:0] writeMemLineDCache;
-	wire writeMemReqDCache;
+	wire [ARCH_BITS-1:0] writeMemAddr;
+	wire [MEMORY_LINE_BITS-1:0] writeMemLine;
+	wire writeMemReq;
 	wire memoryStallDCache;
 	wire wAck;
   reg  [ROB_IDX_BITS-1:0] robIdxDCache;
@@ -315,8 +321,16 @@ module proc(input clk, input rst);
                              (opcodeALU == OPCODE_LDB) || (opcodeALU == OPCODE_LDW));
 	assign opcodeALUToDCache = stallALUToDCache ? opcodeDCache : opcodeALU;
 	assign wDataALUToDCache  = stallALUToDCache ? dCacheAddr : wDataALU;
-  assign srcB2ALUToDCache  = stallALUToDCache ? wDataDCache : srcB2ALU;
+	//assign srcB2ALUByte = ((dCacheAddr[1:0] == 2'b00) ? $signed(srcB2ALU[7:0]) :
+	//											 ((dCacheAddr[1:0] == 2'b01) ? $signed(srcB2ALU[15:8]) :
+	//	 											((dCacheAddr[1:0] == 2'b10) ? $signed(srcB2ALU[23:16]) :
+	//	 											 $signed(srcB2ALU[31:24]))));
+	//assign srcB2ALUStore = (opcodeDCache == OPCODE_STB) ? srcB2ALUByte : srcB2ALU;
+  //assign srcB2ALUToDCache  = stallALUToDCache ? wDataDCache : srcB2ALUStore;
+	assign srcB2ALUToDCache  = stallALUToDCache ? wDataDCache : srcB2ALU;
 	assign regDstALUToDCache = stallALUToDCache ? regDstDCache : regDstALU;
+	assign pcALUToDCache = stallALUToDCache ? pcDCache : pcALU;
+	assign robIdxALUToDCache = stallALUToDCache ? robIdxDCache : robIdxALU;
 
   // Set input port of ROB from ALU
   assign valid_aluToROB = ((opcodeALU == OPCODE_ADD) || (opcodeALU == OPCODE_SUB) ||
@@ -341,14 +355,18 @@ module proc(input clk, input rst);
 			dCacheAddr <= wDataALUToDCache;
 			wDataDCache <= srcB2ALUToDCache;
 			regDstDCache <= regDstALUToDCache;
+			pcDCache <= pcALUToDCache;
+			robIdxDCache <= robIdxALUToDCache;
 	end
 
 	assign WEDCache = ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW));
 	assign REDCache = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW));
+	assign byteCache = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_STB));
 
-	cache dCache(clk, rst, dCacheAddr, dCacheAddr, wDataDCache, WEDCache, wAck, REDCache, rDataDCache, 
-							 rValidDCache, readMemAddrDCache, readMemReqDCache, memDataDCache, readMemDataValidDCache, 
-							 writeMemAddrDCache, writeMemLineDCache, writeMemReqDCache, memWriteDone);
+	dataCache dCache(clk, rst, 1'b0 /* clearSTB */, byteCache, dCacheAddr, dCacheAddr, wDataDCache, 
+									 WEDCache, wAck, REDCache, rDataDCache, rValidDCache, readMemAddrDCache, readMemReqDCache, 
+									 memDataDCache, readMemDataValidDCache, writeMemAddr, writeMemLine, writeMemReq, memWriteDone);
+
 
 	// If cache miss, stall.
 	assign memoryStallDCache = (((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && 
@@ -357,11 +375,15 @@ module proc(input clk, input rst);
 
   // Set input port of ROB from dCache
   assign valid_dcToROB = ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW) ||
-                          (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW) && !memoryStallDCache);
+                          (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && !memoryStallDCache;
   assign robIdx_dcToROB = robIdxDCache;
   assign pc_dcToROB = pcDCache;
   assign address_dcToROB = dCacheAddr;
-  assign data_dcToROB = rDataDCache;
+	assign rDataDCacheByte = ((dCacheAddr[1:0] == 2'b00) ? $signed(rDataDCache[7:0]) :
+														((dCacheAddr[1:0] == 2'b01) ? $signed(rDataDCache[15:8]) :
+														 ((dCacheAddr[1:0] == 2'b10) ? $signed(rDataDCache[23:16]) :
+														  $signed(rDataDCache[31:24]))));
+  assign data_dcToROB = (opcodeDCache == OPCODE_LDB) ? rDataDCacheByte : rDataDCache;
   assign dst_dcToROB = regDstDCache;
   assign we_dcToROB = (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW);
 
@@ -416,6 +438,6 @@ module proc(input clk, input rst);
   memory memInterface(clk, rst,
                       readMemAddrDCache, readMemReqDCache, memDataDCache, readMemDataValidDCache,
                       readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache,
-                      writeMemAddrDCache, writeMemReqDCache, writeMemLineDCache, memWriteDone);
+                      writeMemAddr, writeMemReq, writeMemLine, memWriteDone);
 
 endmodule 

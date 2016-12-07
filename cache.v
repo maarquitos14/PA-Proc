@@ -1,4 +1,4 @@
-module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
+module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
 	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output wAck, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
              output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
              output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
@@ -84,8 +84,14 @@ module cache(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input [proc
 	begin
 		//Handle writes
 		if(WE && !writeMiss) 
-		begin
-			lines[wLine][(wOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS] = wData;
+		begin: writes
+			integer offset, offsetB;
+			offset = (wOffsetW+1)*proc.ARCH_BITS-1;
+			offsetB = byte ? (proc.ARCH_BITS-1)-((wOffsetB+1)*proc.BYTE_BITS-1) : 0;
+			if(byte) 
+				lines[wLine][(offset-offsetB)-:proc.BYTE_BITS] = wData[proc.BYTE_BITS-1:0];
+			else
+				lines[wLine][offset-:proc.ARCH_BITS] = wData[proc.ARCH_BITS-1:0];
 			dirtyBits[wLine] = 1;
 		end
 	end
@@ -141,7 +147,41 @@ module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, output [
   wire [proc.MEMORY_LINE_BITS-1:0] nullLine;
   wire writeMemReq;
 	wire writeAck;
-  cache cacheInsInterface(clk, rst, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, 1'b1/*RE*/, rData, rValid,
+  cache cacheInsInterface(clk, rst, 1'b0 /*byte*/, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, 1'b1/*RE*/, rData, rValid,
                           readMemAddr, readMemReq, readMemLine, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/);
+
+endmodule
+
+module dataCache(input clk, input rst, input clear, input byte, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
+	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output wAck, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
+             output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
+             output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
+
+	wire [proc.ARCH_BITS-1:0] cacheRData;
+	wire cacheRValid, stbRValid;
+	wire readMiss, writeReq;
+	wire [proc.ARCH_BITS-1:0] readMissAddr, writeAddr;
+	wire [proc.MEMORY_LINE_BITS-1:0] readMissData, readSTBData, writeLine;
+	wire writeAck;
+
+	/* Actual dataCache */
+	cache cacheDataInterface(clk, rst, byte, rAddr, wAddr, wData, WE, wAck, RE, cacheRData, cacheRValid, readMissAddr, 
+													 readMiss, readMissData, readMissValid, writeAddr, writeLine, writeReq, writeAck);
+	/* Store buffer */
+	stb storeBuffer(clk, rst, clear, writeReq, writeAddr, writeLine, writeAck, readMiss, readMissAddr, readSTBData, stbRValid, 
+			writeMemReq, writeMemLine, writeMemAddr, writeMemAck);
+
+	assign readMemAddr = readMissAddr;
+	assign readMemReq = (!stbRValid && !readMemLineValid) && readMiss;
+
+	assign readMissData = stbRValid ? readSTBData : readMemData;
+	assign readMissValid = stbRValid || readMemLineValid;
+
+	assign rOffsetW = readMissAddr[proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-1:
+  proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-cacheDataInterface.OFFSET_W_BITS];
+	assign readMissDataWord = readMissData[(rOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
+	assign rData = !readMiss ? cacheRData : readMissDataWord;
+	assign rValid = ((cacheRValid != stbRValid) || readMemLineValid) && RE;
+	assign wAck = WE && writeAck;
 
 endmodule 
