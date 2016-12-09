@@ -1,20 +1,20 @@
 module stb(input clk, input rst, input clear,
-					 input writeReq, input [32-1:0] wAddr, 
-					 input [128-1:0] wData, output wReqAck, 
-					 input readReq, input [32-1:0] rAddr, 
-					 output [128-1:0] rData,  output rValid,
-					 output wMemReq, output [128-1:0] wDataMem,
-					 output [32-1:0] wAddrMem, input wMemAck
-           );
+           input writeReq, input [proc.ARCH_BITS-1:0] wAddr, 
+           input [proc.MEMORY_LINE_BITS-1:0] wData, output wReqAck, 
+           input readReq, input [proc.ARCH_BITS-1:0] rAddr, 
+           output [proc.MEMORY_LINE_BITS-1:0] rData,  output rValid,
+           output wMemReq, output [proc.MEMORY_LINE_BITS-1:0] wDataMem,
+           output [proc.ARCH_BITS-1:0] wAddrMem, input wMemAck
+);
 
-	/* When a load finds data in STB, the write in memory is done?*/
+  /* When a load finds data in STB, the write in memory is done?*/
 
-	parameter STB_SLOTS = 8,
-						STB_IDX_BITS = 3;
+  parameter STB_SLOTS = 8,
+            STB_IDX_BITS = 3;
 
   reg _validBits[STB_SLOTS-1:0];
-  reg [32-1:0] _address[STB_SLOTS-1:0];
-  reg [128-1:0] _data[STB_SLOTS-1:0];
+  reg [proc.ARCH_BITS-1:0] _address[STB_SLOTS-1:0];
+  reg [proc.MEMORY_LINE_BITS-1:0] _data[STB_SLOTS-1:0];
 
   reg [STB_IDX_BITS-1:0]_headIdx;
   wire [STB_IDX_BITS-1:0]_headIdxNext;
@@ -24,8 +24,8 @@ module stb(input clk, input rst, input clear,
   wire [STB_IDX_BITS-1:0]_stbIdxNext;
   reg  _writeReqPrev;
   wire _writeReqNew;
-  reg  [32-1:0] _wAddrPrev;
-  wire [32-1:0] _wAddrPrevNext;
+  reg  [proc.ARCH_BITS-1:0] _wAddrPrev;
+  wire [proc.ARCH_BITS-1:0] _wAddrPrevNext;
   integer i, loadIndex;
 
   assign _validHead = _validBits[_headIdx];
