@@ -30,7 +30,7 @@ module rob(input clk, input rst, input clear,
   assign _headIdxNext = _validHead ? ( (_headIdx + 1)%proc.ROB_SLOTS ) : _headIdx;
 
   /* Set outputs */
-  assign except = _validHead ? _exceptBits[_headIdx] : 0'b0;
+  assign except = _validHead ? _exceptBits[_headIdx] : 1'b0;
   assign address = _address[_headIdx];
   assign pc = _pc[_headIdx];
   // NOTE: Next assign may priorize the _validHead information when _weBits is undefined

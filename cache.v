@@ -36,6 +36,7 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
 	wire [CACHE_LINE_SIZE-1:0] rCurrentLine; 
 	wire [TAG_BITS-1:0] rCurrentTag; 
 	wire [proc.ARCH_BITS-1:0] rCurrentWord; 
+	wire readMiss;
 	
 	// Write handling variables
 	// Info extracted from wAddr
@@ -145,7 +146,7 @@ module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, output [
 
   wire [proc.ARCH_BITS-1:0] nullAddr;
   wire [proc.MEMORY_LINE_BITS-1:0] nullLine;
-  wire writeMemReq;
+  wire nullReq;
 	wire writeAck;
   cache cacheInsInterface(clk, rst, 1'b0 /*byte*/, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, 1'b1/*RE*/, rData, rValid,
                           readMemAddr, readMemReq, readMemLine, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/);
@@ -158,9 +159,10 @@ module dataCache(input clk, input rst, input clear, input byte, input [proc.ARCH
              output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
 
 	wire [proc.ARCH_BITS-1:0] cacheRData;
-	wire cacheRValid, stbRValid;
+	wire cacheRValid, stbRValid, readMissValid;
 	wire readMiss, writeReq;
 	wire [proc.ARCH_BITS-1:0] readMissAddr, writeAddr;
+	wire [proc.ARCH_BITS-1:0] readMissDataWord;
 	wire [proc.MEMORY_LINE_BITS-1:0] readMissData, readSTBData, writeLine;
 	wire writeAck;
 
@@ -172,16 +174,17 @@ module dataCache(input clk, input rst, input clear, input byte, input [proc.ARCH
 			writeMemReq, writeMemLine, writeMemAddr, writeMemAck);
 
 	assign readMemAddr = readMissAddr;
-	assign readMemReq = (!stbRValid && !readMemLineValid) && readMiss;
+	assign readMemReq = !stbRValid && readMiss;
 
 	assign readMissData = stbRValid ? readSTBData : readMemData;
 	assign readMissValid = stbRValid || readMemLineValid;
 
-	assign rOffsetW = readMissAddr[proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-1:
-  proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-cacheDataInterface.OFFSET_W_BITS];
-	assign readMissDataWord = readMissData[(rOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
-	assign rData = !readMiss ? cacheRData : readMissDataWord;
-	assign rValid = ((cacheRValid != stbRValid) || readMemLineValid) && RE;
-	assign wAck = WE && writeAck;
+	//assign rOffsetW = readMissAddr[proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-1:
+  //proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-cacheDataInterface.OFFSET_W_BITS];
+	//assign readMissDataWord = readMissData[(rOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
+	//assign rData = !readMiss ? cacheRData : readMissDataWord;
+	assign rData = cacheRData;
+	assign rValid = cacheRValid;
+	//assign rValid = ((cacheRValid != stbRValid) || readMemLineValid) && RE;
 
 endmodule 

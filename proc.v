@@ -118,6 +118,7 @@ module proc(input clk, input rst);
 	wire readMemDataValidICache;
 
 	//DCache
+	wire byteCache;
 	reg [ARCH_BITS-1:0] dCacheAddr;
 	wire [ARCH_BITS-1:0] addrALUToDCache;
 	reg [ARCH_BITS-1:0] wDataDCache;
@@ -136,6 +137,7 @@ module proc(input clk, input rst);
 	wire writeMemReq;
 	wire memoryStallDCache;
 	wire wAck;
+	wire memWriteDone;
   reg  [ROB_IDX_BITS-1:0] robIdxDCache;
   reg  [ARCH_BITS-1:0] pcDCache;
   wire valid_dcToROB;
