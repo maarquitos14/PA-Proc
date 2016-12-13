@@ -86,13 +86,14 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] data2ALU;
 	reg [ARCH_BITS-1:0] srcB1ALU;
 	reg [ARCH_BITS-1:0] srcB2ALU;
-  wire [REG_IDX_BITS-1:0] regDstALUToDCache;
-	wire [ARCH_BITS-1:0] wDataALUToDCache;
-	wire [ARCH_BITS-1:0] srcB2ALUToDCache;
+  wire [REG_IDX_BITS-1:0] regDstALUToDTLB;
+	wire [ARCH_BITS-1:0] wDataALUToDTLB;
+	wire [ARCH_BITS-1:0] srcB1ALUToDTLB;
+	wire [ARCH_BITS-1:0] srcB2ALUToDTLB;
 	wire [ARCH_BITS-1:0] srcB2ALUByte;
 	wire [ARCH_BITS-1:0] srcB2ALUStore;
-  wire [ROB_IDX_BITS-1:0] robIdxALUToDCache;
-  wire [ARCH_BITS-1:0] pcALUToDCache;
+  wire [ROB_IDX_BITS-1:0] robIdxALUToDTLB;
+  wire [ARCH_BITS-1:0] pcALUToDTLB;
   reg  [ROB_IDX_BITS-1:0] robIdxALU;
   reg  [ARCH_BITS-1:0] pcALU;
   wire valid_aluToROB;
@@ -106,7 +107,9 @@ module proc(input clk, input rst);
 	wire [6:0] opcodeDecode;
 	wire [6:0] opcodeDecodeToNext;
 	reg [6:0] opcodeALU;
-	wire [6:0] opcodeALUToDCache;
+	wire [6:0] opcodeALUToDTLB;
+	reg [6:0] opcodeDTLB;
+	wire [6:0] opcodeDTLBToDCache;
 	reg [6:0] opcodeDCache;
 	wire [REG_IDX_BITS-1:0] regSrc1;
 	wire [REG_IDX_BITS-1:0] regSrc2;
@@ -120,7 +123,7 @@ module proc(input clk, input rst);
 	//DCache
 	wire byteCache;
 	reg [ARCH_BITS-1:0] dCacheAddr;
-	wire [ARCH_BITS-1:0] addrALUToDCache;
+	wire [ARCH_BITS-1:0] addrALUToDTLB;
 	reg [ARCH_BITS-1:0] wDataDCache;
 	reg [ARCH_BITS-1:0] regDstDCache;
 	wire WEDCache;
@@ -177,9 +180,22 @@ module proc(input clk, input rst);
   wire [ARCH_BITS-1:0] wDataWB;
   wire writeEnableWB;
 
+	//DTLB
+	reg [ARCH_BITS-1:0] vAddrDTLB, wAddrDTLB;
+	wire [ARCH_BITS-1:0] pAddrDTLB;
+  reg  [REG_IDX_BITS-1:0] regDstDTLB;
+  reg  [ARCH_BITS-1:0] pcDTLB;
+  reg  [ROB_IDX_BITS-1:0] robIdxDTLB;
+  wire [ROB_IDX_BITS-1:0] robIdx_DTLBToROB;
+	wire [ARCH_BITS-1:0] pc_DTLBToROB, address_DTLBToROB;
+	wire readReqDTLB, writeReqDTLB, validDTLB, ackDTLB, valid_DTLBToROB, except_DTLBTOROB;
+	
+	
+
 	//stall
 	wire stallDecodeToALU;
-	wire stallALUToDCache;
+	wire stallALUToDTLB;
+	wire stallDTLBToDCache;
 	
   // Update input values of fetch stage
 	always @(posedge clk) 
@@ -318,22 +334,6 @@ module proc(input clk, input rst);
 											 ((opcodeALU == OPCODE_BEQ) && (srcB1ALU == srcB2ALU)) ||
 											 ((opcodeALU == OPCODE_BZ) && (srcB1ALU == 0)));
 
-	assign stallALUToDCache = memoryStallDCache &&
-                            ((opcodeALU == OPCODE_STB) || (opcodeALU == OPCODE_STW) ||
-                             (opcodeALU == OPCODE_LDB) || (opcodeALU == OPCODE_LDW));
-	assign opcodeALUToDCache = stallALUToDCache ? opcodeDCache : opcodeALU;
-	assign wDataALUToDCache  = stallALUToDCache ? dCacheAddr : wDataALU;
-	//assign srcB2ALUByte = ((dCacheAddr[1:0] == 2'b00) ? $signed(srcB2ALU[7:0]) :
-	//											 ((dCacheAddr[1:0] == 2'b01) ? $signed(srcB2ALU[15:8]) :
-	//	 											((dCacheAddr[1:0] == 2'b10) ? $signed(srcB2ALU[23:16]) :
-	//	 											 $signed(srcB2ALU[31:24]))));
-	//assign srcB2ALUStore = (opcodeDCache == OPCODE_STB) ? srcB2ALUByte : srcB2ALU;
-  //assign srcB2ALUToDCache  = stallALUToDCache ? wDataDCache : srcB2ALUStore;
-	assign srcB2ALUToDCache  = stallALUToDCache ? wDataDCache : srcB2ALU;
-	assign regDstALUToDCache = stallALUToDCache ? regDstDCache : regDstALU;
-	assign pcALUToDCache = stallALUToDCache ? pcDCache : pcALU;
-	assign robIdxALUToDCache = stallALUToDCache ? robIdxDCache : robIdxALU;
-
   // Set input port of ROB from ALU
   assign valid_aluToROB = ((opcodeALU == OPCODE_ADD) || (opcodeALU == OPCODE_SUB) ||
                            (opcodeALU == OPCODE_MOV));
@@ -342,6 +342,60 @@ module proc(input clk, input rst);
   assign data_aluToROB = wDataALU;
   assign dst_aluToROB = regDstALU;
   assign we_aluToROB = 1'b1;
+
+	assign stallALUToDTLB = memoryStallDCache &&
+                          ((opcodeALU == OPCODE_STB) || (opcodeALU == OPCODE_STW) ||
+                           (opcodeALU == OPCODE_LDB) || (opcodeALU == OPCODE_LDW));
+	assign opcodeALUToDTLB = stallALUToDTLB ? opcodeDTLB : opcodeALU;
+	assign wDataALUToDTLB = stallALUToDTLB ? vAddrDTLB : wDataALU;
+	assign srcB1ALUToDTLB  = stallALUToDTLB ? vAddrDTLB : srcB1ALU;
+	assign srcB2ALUToDTLB  = stallALUToDTLB ? wAddrDTLB : srcB2ALU;
+	assign regDstALUToDTLB = stallALUToDTLB ? regDstDTLB : regDstALU;
+	assign pcALUToDTLB = stallALUToDTLB ? pcDTLB : pcALU;
+	assign robIdxALUToDTLB = stallALUToDTLB ? robIdxDTLB : robIdxALU;
+
+  // Update input values of dTLB stage
+	always @(posedge clk)
+	begin
+		if (rst)
+		begin
+			opcodeDTLB <= OPCODE_NOP;
+		end
+		else
+		begin
+			opcodeDTLB <= opcodeALUToDTLB;
+		end
+			vAddrDTLB <= (opcodeDTLB != OPCODE_TLBWRITE) ? wDataALUToDTLB : srcB1ALUToDTLB;
+			wAddrDTLB <= srcB2ALUToDTLB;
+			regDstDTLB <= regDstALUToDTLB;
+			pcDTLB <= pcALUToDTLB;
+			robIdxDTLB <= robIdxALUToDTLB;
+	end
+
+	assign readReqDTLB = (opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) || 
+											 (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW);
+	assign writeReqDTLB = opcodeDTLB == OPCODE_TLBWRITE;
+
+	tlb dataTLB(clk, rst, vAddrDTLB, wAddrDTLB, pAddrDTLB, readReqDTLB, writeReqDTLB, validDTLB, ackDTLB);
+
+  // Set input port of ROB from DTLB
+	// if !valid, we have a TLB miss
+	assign except_DTLBToROB = !validDTLB;
+  assign pc_DTLBToROB = pcDTLB;
+  assign robIdx_DTLBToROB = robIdxDTLB;
+  assign valid_DTLBToROB = ((opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) ||
+                            (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW)) && !validDTLB;
+  assign address_DTLBToROB = vAddrDTLB;
+	
+	assign stallDTLBToDCache = memoryStallDCache &&
+                            ((opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) ||
+                             (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW));
+	assign opcodeDTLBToDCache = stallDTLBToDCache ? opcodeDCache : opcodeDTLB;
+	assign pAddrDTLBToDCache  = stallDTLBToDCache ? dCacheAddr : pAddrDTLB;
+	assign srcB2DTLBToDCache  = stallDTLBToDCache ? wDataDCache : wAddrDTLB;
+	assign regDstDTLBToDCache = stallDTLBToDCache ? regDstDCache : regDstDTLB;
+	assign pcDTLBToDCache = stallDTLBToDCache ? pcDCache : pcDTLB;
+	assign robIdxDTLBToDCache = stallDTLBToDCache ? robIdxDCache : robIdxDTLB;
 
   // Update input values of dCache stage
 	always @(posedge clk)
@@ -352,13 +406,13 @@ module proc(input clk, input rst);
 		end
 		else
 		begin
-			opcodeDCache <= opcodeALUToDCache;
+			opcodeDCache <= opcodeDTLBToDCache;
 		end
-			dCacheAddr <= wDataALUToDCache;
-			wDataDCache <= srcB2ALUToDCache;
-			regDstDCache <= regDstALUToDCache;
-			pcDCache <= pcALUToDCache;
-			robIdxDCache <= robIdxALUToDCache;
+			dCacheAddr <= pAddrDTLBToDCache;
+			wDataDCache <= srcB2DTLBToDCache;
+			regDstDCache <= regDstDTLBToDCache;
+			pcDCache <= pcDTLBToDCache;
+			robIdxDCache <= robIdxDTLBToDCache;
 	end
 
 	assign WEDCache = ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW));
@@ -428,6 +482,9 @@ module proc(input clk, input rst);
                     /* Input from MULTIPLIER (MUL) */
                     valid_multToROB, robIdx_multToROB, 1'b0 /* except_multToROB */, pc_multToROB,
                     32'hDEADBEEF /* address_multToROB */, data_multToROB, dst_multToROB, 1'b1 /* we_multToROB */,
+                    /* Input from dTLB (LDW, STW, LDB, STB) */
+                    valid_DTLBToROB, robIdx_DTLBToROB, except_DTLBToROB, pc_DTLBToROB,
+                    address_DTLBToROB, 32'hDEADBEEF /*data_DTLBToROB*/, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/,
                     /* Input from dCache (LDW, STW, LDB, STB) */
                     valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
                     address_dcToROB, data_dcToROB, dst_dcToROB, we_dcToROB,

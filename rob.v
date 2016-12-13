@@ -8,6 +8,9 @@ module rob(input clk, input rst, input clear,
            /* Input port3 */
            input valid3, input [proc.ROB_IDX_BITS-1:0]robIdx3, input except3, input [proc.ARCH_BITS-1:0]pc3,
            input [proc.ARCH_BITS-1:0]address3, input [proc.ARCH_BITS-1:0]data3, input [proc.REG_IDX_BITS-1:0]dst3, input we3,
+           /* Input port4 */
+           input valid4, input [proc.ROB_IDX_BITS-1:0]robIdx4, input except4, input [proc.ARCH_BITS-1:0]pc4,
+           input [proc.ARCH_BITS-1:0]address4, input [proc.ARCH_BITS-1:0]data4, input [proc.REG_IDX_BITS-1:0]dst4, input we4,
            /* Output to generate exceptions */
            output except, output [proc.ARCH_BITS-1:0]address, output [proc.ARCH_BITS-1:0]pc,
            /* Output to register file */
@@ -109,6 +112,25 @@ module rob(input clk, input rst, input clear,
         _pc        [robIdx3] <= pc3;
         _wData     [robIdx3] <= data3;
         _wDstReg   [robIdx3] <= dst3;
+      end
+    end
+  end
+
+	// Handle data from port4
+  always @(posedge clk) 
+  begin
+    if(!rst)
+    begin
+      // Don't merge with reset condition. The reset allways will have a value and valid4 not
+      if (valid4)
+      begin
+        _validBits [robIdx3] <= 1'b1;
+        _exceptBits[robIdx3] <= except4;
+        _weBits    [robIdx3] <= we4;
+        _address   [robIdx3] <= address4;
+        _pc        [robIdx3] <= pc4;
+        _wData     [robIdx3] <= data4;
+        _wDstReg   [robIdx3] <= dst4;
       end
     end
   end
