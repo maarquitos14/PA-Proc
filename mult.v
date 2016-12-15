@@ -1,4 +1,4 @@
-module multEmptyStage(input clk, input rst,
+module multEmptyStage(input clk, input rst, input clear,
                       /* Input data */
                       input [proc.OPCODE_BITS-1:0] opcodeIn, input [proc.ROB_IDX_BITS-1:0] robIdxIn, input [proc.ARCH_BITS-1:0] pcIn,
                       input [proc.REG_IDX_BITS-1:0] dstRegIn, input [proc.ARCH_BITS-1:0] data1In, input [proc.ARCH_BITS-1:0] data2In,
@@ -23,7 +23,7 @@ module multEmptyStage(input clk, input rst,
 
   always @(posedge clk) 
   begin
-    if(rst)
+    if(rst || clear)
     begin
       _opcode <= proc.OPCODE_NOP;
     end
@@ -40,7 +40,7 @@ module multEmptyStage(input clk, input rst,
 
 endmodule
 
-module mult(input clk, input rst,
+module mult(input clk, input rst, input clear,
             /* Input data */
             input [proc.OPCODE_BITS-1:0] opcodeIn, input [proc.ROB_IDX_BITS-1:0] robIdxIn, input [proc.ARCH_BITS-1:0] pcIn,
             input [proc.REG_IDX_BITS-1:0] dstRegIn, input [proc.ARCH_BITS-1:0] data1In, input [proc.ARCH_BITS-1:0] data2In,
@@ -57,7 +57,7 @@ module mult(input clk, input rst,
   wire [proc.ARCH_BITS-1:0] _data1_01;
   wire [proc.ARCH_BITS-1:0] _data2_01;
 
-  multEmptyStage stage0(clk, rst, opcodeIn, robIdxIn, pcIn, dstRegIn, data1In, data2In,
+  multEmptyStage stage0(clk, rst, clear, opcodeIn, robIdxIn, pcIn, dstRegIn, data1In, data2In,
                         _opcode_01, _robIdx_01, _pc_01, _dstReg_01, _data1_01, _data2_01);
 
   wire [proc.OPCODE_BITS-1:0] _opcode_12;
@@ -67,7 +67,7 @@ module mult(input clk, input rst,
   wire [proc.ARCH_BITS-1:0] _data1_12;
   wire [proc.ARCH_BITS-1:0] _data2_12;
 
-  multEmptyStage stage1(clk, rst, _opcode_01, _robIdx_01, _pc_01, _dstReg_01, _data1_01, _data2_01,
+  multEmptyStage stage1(clk, rst, clear, _opcode_01, _robIdx_01, _pc_01, _dstReg_01, _data1_01, _data2_01,
                         _opcode_12, _robIdx_12, _pc_12, _dstReg_12, _data1_12, _data2_12);
 
   wire [proc.OPCODE_BITS-1:0] _opcode_23;
@@ -77,7 +77,7 @@ module mult(input clk, input rst,
   wire [proc.ARCH_BITS-1:0] _data1_23;
   wire [proc.ARCH_BITS-1:0] _data2_23;
 
-  multEmptyStage stage2(clk, rst, _opcode_12, _robIdx_12, _pc_12, _dstReg_12, _data1_12, _data2_12,
+  multEmptyStage stage2(clk, rst, clear, _opcode_12, _robIdx_12, _pc_12, _dstReg_12, _data1_12, _data2_12,
                         _opcode_23, _robIdx_23, _pc_23, _dstReg_23, _data1_23, _data2_23);
 
   wire [proc.OPCODE_BITS-1:0] _opcode_34;
@@ -87,7 +87,7 @@ module mult(input clk, input rst,
   wire [proc.ARCH_BITS-1:0] _data1_34;
   wire [proc.ARCH_BITS-1:0] _data2_34;
 
-  multEmptyStage stage3(clk, rst, _opcode_23, _robIdx_23, _pc_23, _dstReg_23, _data1_23, _data2_23,
+  multEmptyStage stage3(clk, rst, clear, _opcode_23, _robIdx_23, _pc_23, _dstReg_23, _data1_23, _data2_23,
                         _opcode_34, _robIdx_34, _pc_34, _dstReg_34, _data1_34, _data2_34);
 
   wire [MULT_BITS-1:0] _res;

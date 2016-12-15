@@ -141,14 +141,14 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
   
 endmodule 
 
-module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, output [proc.ARCH_BITS-1:0] rData, output rValid,
+module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
                 output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemLine, input readMemLineValid);
 
   wire [proc.ARCH_BITS-1:0] nullAddr;
   wire [proc.MEMORY_LINE_BITS-1:0] nullLine;
   wire nullReq;
 	wire writeAck;
-  cache cacheInsInterface(clk, rst, 1'b0 /*byte*/, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, 1'b1/*RE*/, rData, rValid,
+  cache cacheInsInterface(clk, rst, 1'b0 /*byte*/, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, RE, rData, rValid,
                           readMemAddr, readMemReq, readMemLine, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/);
 
 endmodule

@@ -35,11 +35,24 @@ int main() {
             for(int i=0; i<5; i++)
                 instBin.set(i+10, src2Bin[i]);
             for(int i=0; i<10; i++)
-                instBin.set(i, dstBin[i]);
+                instBin.set(i, zero[i]);
+        }
+        else if(!opcode.compare("movi")) { 
+            int dst, offset;
+            std::cin >> dst >> offset;
+            std::bitset<7> opcodeBin(21) ;
+            std::bitset<5> dstBin(dst);
+            std::bitset<20> offsetBin(offset);
+            for(int i=0; i<7; i++)
+                instBin.set(i+25, opcodeBin[i]); 
+            for(int i=0; i<5; i++)
+                instBin.set(i+20, dstBin[i]);
+            for(int i=0; i<20; i++)
+                instBin.set(i, offsetBin[i]);
         }
         //M-type instructions
         else if(!opcode.compare("ldb") || !opcode.compare("ldw") || !opcode.compare("stb") || 
-                !opcode.compare("stw") || !opcode.compare("mov") || !opcode.compare("movi"))  
+                !opcode.compare("stw") || !opcode.compare("mov"))  
         {
             int dst, src1, offset;
             std::cin >> dst >> src1 >> offset;
@@ -85,7 +98,9 @@ int main() {
                 instBin.set(i, offsetBin[i]);
         }
         //B-type instructions
-        else if(!opcode.compare("beq") || !opcode.compare("jump") || !opcode.compare("bz")) {
+        else if(!opcode.compare("beq") || !opcode.compare("jump") || 
+                !opcode.compare("bz") || !opcode.compare("tlbwrite") || 
+                !opcode.compare("iret")) {
             int offsetHi, src1, offsetM, offsetLo;
             std::cin >> offsetHi >> src1 >> offsetM >> offsetLo;
             if(!opcode.compare("beq")) {
@@ -98,10 +113,26 @@ int main() {
                 for(int i=0; i<7; i++)
                     instBin.set(i+25, opcodeBin[i]); 
             }
-            else {
+            else if(!opcode.compare("bz")) {
                 std::bitset<7> opcodeBin(52) ;
                 for(int i=0; i<7; i++)
                     instBin.set(i+25, opcodeBin[i]); 
+            }
+            else if(!opcode.compare("tlbwrite")){
+                std::bitset<7> opcodeBin(50) ;
+                for(int i=0; i<7; i++)
+                    instBin.set(i+25, opcodeBin[i]); 
+                offsetHi = 0;
+            }
+            else {
+                std::cout << "iret" << std::endl;
+                std::bitset<7> opcodeBin(51) ;
+                for(int i=0; i<7; i++)
+                    instBin.set(i+25, opcodeBin[i]); 
+                offsetHi = 0;
+                offsetM = 0;
+                offsetLo = 0;
+                src1 = 0; // Because we want rm0.
             }
             std::bitset<5> offsetHiBin(offsetHi), src1Bin(src1), offsetMBin(offsetM);
             std::bitset<10> offsetLoBin(offsetLo);

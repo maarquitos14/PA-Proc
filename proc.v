@@ -14,8 +14,10 @@ module proc(input clk, input rst);
 	parameter	PC_RST		= 32'h00001000,
 						PC_EXCEPT	= 32'h00002000;
 
+	parameter USR_CODE_INIT = 32'h00001000;
+
 	// Opcodes
-	parameter 	OPCODE_ADD		= 7'h00,
+	parameter 	OPCODE_ADD			= 7'h00,
 							OPCODE_SUB			= 7'h01,
 							OPCODE_MUL			= 7'h02,
 							OPCODE_LDB			= 7'h10,
@@ -37,8 +39,8 @@ module proc(input clk, input rst);
 	
 	parameter	VM_XLATE_OFFSET	= 32'h00008000;
 	
-	parameter	PRIVILEGE_USR	= 0,
-						PRIVILEGE_OS	= 1;
+	parameter	PRIVILEGE_USR	= 32'h00000000,
+						PRIVILEGE_OS	= 32'h00000001;
 
 	//Program Counter
 	reg  [ARCH_BITS-1:0] pc;
@@ -87,6 +89,7 @@ module proc(input clk, input rst);
 	reg [ARCH_BITS-1:0] srcB1ALU;
 	reg [ARCH_BITS-1:0] srcB2ALU;
   wire [REG_IDX_BITS-1:0] regDstALUToDTLB;
+	wire [ARCH_BITS-1:0] vAddrALUToDTLB;
 	wire [ARCH_BITS-1:0] wDataALUToDTLB;
 	wire [ARCH_BITS-1:0] srcB1ALUToDTLB;
 	wire [ARCH_BITS-1:0] srcB2ALUToDTLB;
@@ -102,6 +105,7 @@ module proc(input clk, input rst);
   wire [ARCH_BITS-1:0] data_aluToROB;
   wire [REG_IDX_BITS-1:0] dst_aluToROB;
   wire we_aluToROB;
+  wire specialRegsWEAlu;
 	
 	//Instruction decoded
 	wire [6:0] opcodeDecode;
@@ -113,17 +117,18 @@ module proc(input clk, input rst);
 	reg [6:0] opcodeDCache;
 	wire [REG_IDX_BITS-1:0] regSrc1;
 	wire [REG_IDX_BITS-1:0] regSrc2;
+	wire specialSrc1;
 
 	//ICache
 	wire [ARCH_BITS-1:0] readMemAddrICache;
   wire [MEMORY_LINE_BITS-1:0] memDataICache;
 	wire readMemReqICache;
 	wire readMemDataValidICache;
+  reg enableICache;
 
 	//DCache
 	wire byteCache;
 	reg [ARCH_BITS-1:0] dCacheAddr;
-	wire [ARCH_BITS-1:0] addrALUToDTLB;
 	reg [ARCH_BITS-1:0] wDataDCache;
 	reg [ARCH_BITS-1:0] regDstDCache;
 	wire WEDCache;
@@ -152,6 +157,7 @@ module proc(input clk, input rst);
   wire we_dcToROB;
 
   // Multiplier
+  wire clearMult;
   reg  [ARCH_BITS-1:0] data1Mult;
   reg  [ARCH_BITS-1:0] data2Mult;
   wire [ARCH_BITS-1:0] dataHMult;
@@ -171,14 +177,19 @@ module proc(input clk, input rst);
   wire [REG_IDX_BITS-1:0] dst_multToROB;
 
   // ROB and exceptions
-  wire exceptROB;
-  wire [proc.ARCH_BITS-1:0] exceptAddrROB;
-  wire [proc.ARCH_BITS-1:0] exceptPcROB;
+  wire exceptROB, clearROB;
+	wire [ARCH_BITS-1:0] exceptTypeROB;
+  wire [ARCH_BITS-1:0] exceptAddrROB;
+  wire [ARCH_BITS-1:0] exceptPcROB;
 
   // WB stage
   wire [REG_IDX_BITS-1:0] regDstWB;
   wire [ARCH_BITS-1:0] wDataWB;
   wire writeEnableWB;
+
+  // Register file
+  wire [ARCH_BITS-1:0] modeRegData;
+  wire specialRegsWE;
 
 	//DTLB
 	reg [ARCH_BITS-1:0] vAddrDTLB, wAddrDTLB;
@@ -189,15 +200,36 @@ module proc(input clk, input rst);
   wire [ROB_IDX_BITS-1:0] robIdx_DTLBToROB;
 	wire [ARCH_BITS-1:0] pc_DTLBToROB, address_DTLBToROB;
 	wire readReqDTLB, writeReqDTLB, validDTLB, ackDTLB, valid_DTLBToROB, except_DTLBTOROB;
-	
-	
+  wire enableDTLB;
+	wire [ARCH_BITS-1:0] pAddrDTLBToDCache, srcB2DTLBToDCache, regDstDTLBToDCache, 
+											 pcDTLBToDCache, robIdxDTLBToDCache;
 
 	//stall
 	wire stallDecodeToALU;
 	wire stallALUToDTLB;
 	wire stallDTLBToDCache;
-	
-  // Update input values of fetch stage
+	wire [ARCH_BITS-1:0] currentMode;
+
+  // Mierda a mover a su sitio
+	wire [ARCH_BITS-1:0] pcPhy;
+  reg  [ARCH_BITS-1:0] pcPhyFetch, pcVirFetch;
+  wire [ARCH_BITS-1:0] pcPhyITlbToFetch, pcVirITlbToFetch, pcVirFetchToDecode;
+  wire enableITLB, writeReqITLB, validITLB, ackITLB, iTLBExceptFetchToDecode;
+  wire [ARCH_BITS-1:0] wAddrITLB, pAddrITLB;
+	wire exceptITlbToFetch;
+	reg  iTLBExceptFetch;
+	reg  iTLBExceptDecode; 
+  wire valid_decodeToROB;
+  wire [ROB_IDX_BITS-1:0] robIdx_decodeToROB;
+  wire [ARCH_BITS-1:0] pc_decodeToROB;
+	wire except_decodeToROB;
+	wire stallFetch;
+	wire stallITlbToFetch;
+
+	assign pcNext = exceptROB ? PC_EXCEPT : (memoryStallDCache ? pc : 
+									(takeBranch ? pcNextBranch : (!stallFetch ? pc+4 : pc))); 
+
+  // Update input values of translate stage
 	always @(posedge clk) 
 	begin
 		if(rst)
@@ -205,52 +237,104 @@ module proc(input clk, input rst);
 		else
 			pc <= pcNext;
 	end
+
+  assign enableITLB = currentMode == PRIVILEGE_USR;
+
+  tlb insTLB(clk, rst, enableITLB, pc, wAddrITLB, pcPhy, 1'b1 /*readReqITLB*/, writeReqITLB, validITLB, ackITLB);
+
+	assign stallITlbToFetch = stallFetch || memoryStallDCache;
+  assign pcPhyITlbToFetch = stallITlbToFetch ? pcPhyFetch : pcPhy;
+  assign pcVirITlbToFetch = stallITlbToFetch ? pcVirFetch : pc;
+  assign enableICacheITlbToFetch = exceptROB ? 1'b0 : (stallITlbToFetch ? enableICache : validITLB);
+  assign exceptITlbToFetch = exceptROB ? 1'b0 : (stallITlbToFetch ? iTLBExceptFetch : !validITLB);
+
+  // Update input values of fetch stage
+	always @(posedge clk) 
+	begin
+		if(rst)
+		begin
+      enableICache <= 1'b0;
+			iTLBExceptFetch <= 1'b0;
+		end
+		else
+		begin
+      iTLBExceptFetch <= exceptITlbToFetch;
+			pcPhyFetch <= pcPhyITlbToFetch;
+      pcVirFetch <= pcVirITlbToFetch;
+      enableICache <= enableICacheITlbToFetch;
+		end
+	end
 	
-	assign pcNext = memoryStallDCache ? pc : 
-									(takeBranch ? pcNextBranch : (instFetchValid ? pc+4 : pc)); 
-	
-	cacheIns iCache(clk, rst, pc, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache);
+	cacheIns iCache(clk, rst, pcPhyFetch, enableICache, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache);
   
-	assign instFetchToDecode = memoryStallDCache ? instDecode : 
-														 (takeBranch || !instFetchValid) ? NOP_INSTRUCTION : instFetch;
+	assign stallFetchToDecode = memoryStallDCache;
+	assign instFetchToDecode = (exceptROB || !enableICache) ? NOP_INSTRUCTION : (stallFetchToDecode ? instDecode : 
+														 (takeBranch || stallFetch) ? NOP_INSTRUCTION : instFetch);
+  assign pcVirFetchToDecode = stallFetchToDecode ? pcDecode : pcVirFetch;
+	assign iTLBExceptFetchToDecode = exceptROB ? 1'b0 : (stallFetchToDecode ? iTLBExceptDecode : iTLBExceptFetch);
+	assign stallFetch = enableICache ? !instFetchValid : 1'b0;
 	
   // Update input values of decode stage
 	always @(posedge clk)
 	begin
-		pcDecode <= pc;
+		pcDecode <= pcVirFetchToDecode;
 		if (rst)
 		begin
 			instDecode <= NOP_INSTRUCTION;
       robIdxDecode <= 4'b000;
+			iTLBExceptDecode <= 1'b0;
 		end
 		else
 		begin
+			iTLBExceptDecode <= iTLBExceptFetchToDecode;
 	    instDecode <= instFetchToDecode;
       robIdxDecode <= robIdxDecodeNext;
 		end
 	end
 
   // If stall keep the same robIdxDecode, if decoded instruction is a NOP keep the same robIdxDecode, otherwise +1%NUM_SLOTS
-  assign opcodeDecodeNeedsRobIdx = (opcodeDecode == OPCODE_STB || opcodeDecode == OPCODE_STW || opcodeDecode == OPCODE_LDB ||
+  assign opcodeDecodeNeedsRobIdx = iTLBExceptDecode || (opcodeDecode == OPCODE_STB || opcodeDecode == OPCODE_STW || opcodeDecode == OPCODE_LDB ||
     opcodeDecode == OPCODE_LDW || opcodeDecode == OPCODE_ADD || opcodeDecode == OPCODE_SUB || opcodeDecode == OPCODE_MOV ||
-    opcodeDecode == OPCODE_MUL);
-  assign robIdxDecodeNext = stallDecodeToALU ? robIdxDecode :
-                            (takeBranch ? robIdxALU : ((robIdxDecode + opcodeDecodeNeedsRobIdx)%ROB_SLOTS) );
+    opcodeDecode == OPCODE_MUL || opcodeDecode == OPCODE_MOV || opcodeDecode == OPCODE_MOVI || opcodeDecode == OPCODE_TLBWRITE);
+  assign robIdxDecodeNext = exceptROB ? 4'b0000 : (stallDecodeToALU ? robIdxDecode :
+                            (takeBranch ? robIdxALU : ((robIdxDecode + opcodeDecodeNeedsRobIdx)%ROB_SLOTS) ));
 
 	decoder dec(clk, rst, instDecode, opcodeDecode, regDstDecode, regSrc1Decode, regSrc2Decode, imm, offset, offsetHi, offsetM, offsetLo);
 	
 	assign regSrc1 = regSrc1Decode;
 	assign regSrc2 = (opcodeDecode == OPCODE_STB || opcodeDecode == OPCODE_STW) ?
 									regDstDecode : regSrc2Decode;
+	// MOV is just used in a TLB miss to handle the exception, so if there is a mov, it is from a special reg.
+	assign specialSrc1 = (opcodeDecode == OPCODE_MOV) || (opcodeDecode == OPCODE_IRET);
+
+  assign modeRegData = exceptROB ? PRIVILEGE_OS : PRIVILEGE_USR;
+  assign specialRegsWE = exceptROB || specialRegsWEAlu;
+
+  // Set input port of ROB from DECODE
+  assign valid_decodeToROB = iTLBExceptDecode;
+  assign robIdx_decodeToROB = robIdxDecode;
+  assign pc_decodeToROB = pcDecode;
+	assign except_decodeToROB = iTLBExceptDecode;
 	
-	registerFile regs(clk, rst, regSrc1, regSrc2, regDstWB, wDataWB, writeEnableWB, data1Decode, data2Decode);
+	registerFile regs(clk, rst, 
+									  /* Input Port A */
+										regSrc1, regSrc2, specialSrc1, 1'b0 /*specialSrc2*/, regDstWB, 1'b0 /*specialDst*/, wDataWB, writeEnableWB, 
+										/* Input Port B -> rm0 */
+										exceptPcROB,
+										/* Input Port C -> rm1 */
+										exceptAddrROB,
+										/* Input Port D -> rm2 */
+										exceptTypeROB,
+										/* Input Port E -> rm4 */
+										modeRegData, specialRegsWE, 
+										data1Decode, data2Decode, currentMode);
 	
 	assign offset20 = offset+(offsetHi<<15);
 	assign offset15 =	offsetLo+(offsetHi<<10);
 
   // TODO: Relax the next statement
   assign stallDecodeToALU = memoryStallDCache;
-  assign opcodeDecodeToNext = (stallDecodeToALU ? opcodeALU :
+  assign opcodeDecodeToNext = exceptROB ? OPCODE_NOP : (stallDecodeToALU ? opcodeALU :
                              (takeBranch ? OPCODE_NOP : opcodeDecode));
   assign regDstDecodeToNext = stallDecodeToALU ? regDstALU : regDstDecode;
   assign data1DecodeToNext = stallDecodeToALU ? srcB1ALU : data1Decode;
@@ -329,14 +413,14 @@ module proc(input clk, input rst);
 	end
 	
 	alu alu0(clk, rst, opcodeALU, data1ALU, data2ALU, wDataALU);
-	assign pcNextBranch = wDataALU;
-	assign takeBranch = ((opcodeALU == OPCODE_JUMP) || 
+	assign pcNextBranch = (opcodeALU == OPCODE_IRET) ? srcB1ALU : wDataALU;
+	assign takeBranch = opcodeALU == OPCODE_IRET || ((opcodeALU == OPCODE_JUMP) || 
 											 ((opcodeALU == OPCODE_BEQ) && (srcB1ALU == srcB2ALU)) ||
 											 ((opcodeALU == OPCODE_BZ) && (srcB1ALU == 0)));
 
   // Set input port of ROB from ALU
   assign valid_aluToROB = ((opcodeALU == OPCODE_ADD) || (opcodeALU == OPCODE_SUB) ||
-                           (opcodeALU == OPCODE_MOV));
+                           (opcodeALU == OPCODE_MOV) || (opcodeALU == OPCODE_MOVI));
   assign robIdx_aluToROB = robIdxALU;
   assign pc_aluToROB = pcALU;
   assign data_aluToROB = wDataALU;
@@ -346,13 +430,15 @@ module proc(input clk, input rst);
 	assign stallALUToDTLB = memoryStallDCache &&
                           ((opcodeALU == OPCODE_STB) || (opcodeALU == OPCODE_STW) ||
                            (opcodeALU == OPCODE_LDB) || (opcodeALU == OPCODE_LDW));
-	assign opcodeALUToDTLB = stallALUToDTLB ? opcodeDTLB : opcodeALU;
+	assign opcodeALUToDTLB = exceptROB ? OPCODE_NOP : (stallALUToDTLB ? opcodeDTLB : opcodeALU);
 	assign wDataALUToDTLB = stallALUToDTLB ? vAddrDTLB : wDataALU;
 	assign srcB1ALUToDTLB  = stallALUToDTLB ? vAddrDTLB : srcB1ALU;
 	assign srcB2ALUToDTLB  = stallALUToDTLB ? wAddrDTLB : srcB2ALU;
 	assign regDstALUToDTLB = stallALUToDTLB ? regDstDTLB : regDstALU;
 	assign pcALUToDTLB = stallALUToDTLB ? pcDTLB : pcALU;
 	assign robIdxALUToDTLB = stallALUToDTLB ? robIdxDTLB : robIdxALU;
+  assign specialRegsWEAlu = (opcodeALU == OPCODE_IRET);
+	assign vAddrALUToDTLB = stallALUToDTLB ? vAddrDTLB : ((opcodeALU != OPCODE_TLBWRITE) ? wDataALUToDTLB : srcB1ALUToDTLB);
 
   // Update input values of dTLB stage
 	always @(posedge clk)
@@ -365,7 +451,7 @@ module proc(input clk, input rst);
 		begin
 			opcodeDTLB <= opcodeALUToDTLB;
 		end
-			vAddrDTLB <= (opcodeDTLB != OPCODE_TLBWRITE) ? wDataALUToDTLB : srcB1ALUToDTLB;
+			vAddrDTLB <= vAddrALUToDTLB;
 			wAddrDTLB <= srcB2ALUToDTLB;
 			regDstDTLB <= regDstALUToDTLB;
 			pcDTLB <= pcALUToDTLB;
@@ -375,8 +461,9 @@ module proc(input clk, input rst);
 	assign readReqDTLB = (opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) || 
 											 (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW);
 	assign writeReqDTLB = opcodeDTLB == OPCODE_TLBWRITE;
+  assign enableDTLB = currentMode == PRIVILEGE_USR;
 
-	tlb dataTLB(clk, rst, vAddrDTLB, wAddrDTLB, pAddrDTLB, readReqDTLB, writeReqDTLB, validDTLB, ackDTLB);
+	tlb dataTLB(clk, rst, enableDTLB, vAddrDTLB, wAddrDTLB, pAddrDTLB, readReqDTLB, writeReqDTLB, validDTLB, ackDTLB);
 
   // Set input port of ROB from DTLB
 	// if !valid, we have a TLB miss
@@ -390,7 +477,7 @@ module proc(input clk, input rst);
 	assign stallDTLBToDCache = memoryStallDCache &&
                             ((opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) ||
                              (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW));
-	assign opcodeDTLBToDCache = stallDTLBToDCache ? opcodeDCache : opcodeDTLB;
+	assign opcodeDTLBToDCache = exceptROB ? OPCODE_NOP : (stallDTLBToDCache ? opcodeDCache : opcodeDTLB);
 	assign pAddrDTLBToDCache  = stallDTLBToDCache ? dCacheAddr : pAddrDTLB;
 	assign srcB2DTLBToDCache  = stallDTLBToDCache ? wDataDCache : wAddrDTLB;
 	assign regDstDTLBToDCache = stallDTLBToDCache ? regDstDCache : regDstDTLB;
@@ -461,7 +548,7 @@ module proc(input clk, input rst);
     pcMult <= pcDecodeToNext;
 	end
 
-  mult multiplier(clk, rst,
+  mult multiplier(clk, rst, clearMult,
                   /* Input data */
                   opcodeMult, robIdxMult, pcMult, regDstMult, data1Mult, data2Mult,
                   /* Output data */
@@ -475,7 +562,10 @@ module proc(input clk, input rst);
   assign dst_multToROB = regDstMultOut;
 
   // Reorder buffer
-  rob reorderBuffer(clk, rst, 1'b0 /* clearROB */,
+  rob reorderBuffer(clk, rst, clearROB,
+                    /* Input from decode */
+                    valid_decodeToROB, robIdx_decodeToROB, except_decodeToROB, pc_decodeToROB,
+                    pc_decodeToROB /*pc is the address*/, 32'hDEADBEEF /*data_decodeToROB*/, 5'b11111/*dst_decodeToROB*/, 1'b0/*we_decodeToROB*/,
                     /* Input from ALU (ADD, SUB) */
                     valid_aluToROB, robIdx_aluToROB, 1'b0 /* except_aluToROB */, pc_aluToROB,
                     32'hDEADBEEF /* address_aluToROB */, data_aluToROB, dst_aluToROB, we_aluToROB,
@@ -489,9 +579,12 @@ module proc(input clk, input rst);
                     valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
                     address_dcToROB, data_dcToROB, dst_dcToROB, we_dcToROB,
                     /* Exceptions output */
-                    exceptROB, exceptAddrROB, exceptPcROB,
+                    exceptROB, exceptAddrROB, exceptPcROB, exceptTypeROB,
                     /* Output to register file */
                     regDstWB, wDataWB, writeEnableWB);
+
+  assign clearROB = exceptROB;
+  assign clearMult = exceptROB;
 
   //Memory interface 
   memory memInterface(clk, rst,

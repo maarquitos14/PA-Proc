@@ -5,8 +5,8 @@ module memory(input clk, input rst,
 
 
   // Memory parameters
-  parameter MEMORY_LINES = 2048, // Each line is 16B, 16B*2048=32KB
-            LINE_BITS = 11,      // pow2(MEMORY_LINES)
+  parameter MEMORY_LINES = 4096, // Each line is 16B, 16B*4096=64KB
+            LINE_BITS = 12,      // pow2(MEMORY_LINES)
             BYTE_BITS = 4;       // pow2(MEMORY_LINE_BITS/8)
   parameter DELAY_READ_CYCLES = 3'b111,
             DELAY_WRITE_CYCLES = 3'b101;
@@ -27,6 +27,9 @@ module memory(input clk, input rst,
   reg [2:0] _rHPCnt;
   reg [2:0] _rLPCnt;
   reg [2:0] _wCnt;
+  wire [proc.ARCH_BITS-1:0] _rHPAddrNext;
+  wire [proc.ARCH_BITS-1:0] _rLPAddrNext;
+  wire [proc.ARCH_BITS-1:0] _wAddrNext;
   wire [2:0] _rHPCntNext;
   wire [2:0] _rLPCntNext;
   wire [2:0] _wCntNext;
@@ -60,13 +63,13 @@ module memory(input clk, input rst,
     begin
       // Writes
       _wCnt  <= _wCntNext;
-      _wAddr <= wAddr;
+      _wAddr <= _wAddrNext;
       
       // Reads
       _rHPCnt  <= _rHPCntNext;
       _rLPCnt  <= _rLPCntNext;
-      _rHPAddr <= rHPAddr;
-      _rLPAddr <= rLPAddr;
+      _rHPAddr <= _rHPAddrNext;
+      _rLPAddr <= _rLPAddrNext;
     end
   end
 
@@ -81,6 +84,8 @@ module memory(input clk, input rst,
          _rLPData <= _memory[_rLPLine];
     end
   end
+  assign _rHPAddrNext = rHPE ? rHPAddr : _rHPAddr;
+  assign _rLPAddrNext = rLPE ? rLPAddr : _rLPAddr;
   assign _rHPLine = _rHPAddr[LINE_BITS+BYTE_BITS-1:BYTE_BITS];
   assign _rLPLine = _rLPAddr[LINE_BITS+BYTE_BITS-1:BYTE_BITS];
   assign rHPValid = _rHPReady;
@@ -97,6 +102,7 @@ module memory(input clk, input rst,
          _memory[_wLine] <= wData;
     end
   end
+  assign _wAddrNext = wE ? wAddr : _wAddr;
   assign _wLine = _wAddr[LINE_BITS+BYTE_BITS-1:BYTE_BITS];
   assign wDone  = _wReady;
 

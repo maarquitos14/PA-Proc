@@ -19,6 +19,8 @@ module alu(input clk, input rst, input [6:0] opcode, input [proc.ARCH_BITS-1:0] 
       proc.OPCODE_BEQ: res = resAdd;
       proc.OPCODE_JUMP: res = resAdd;
 			proc.OPCODE_BZ: res = resAdd;
+			proc.OPCODE_MOV: res = data1;
+			proc.OPCODE_MOVI: res = data1;
       default: res = 32'hffffffff;
     endcase
 	end
