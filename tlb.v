@@ -12,6 +12,7 @@ module tlb(input clk, input rst, input enable, input [proc.ARCH_BITS-1:0] vAddr,
       reg _enable;
 			wire [LINE_BITS-1:0] rLine, wLine;
 			wire [TAG_BITS-1:0] rTag, rLineTag;
+			wire [proc.ARCH_BITS-1:0] translation;
 			integer i;
 			
 			always @(posedge clk) 
@@ -39,8 +40,9 @@ module tlb(input clk, input rst, input enable, input [proc.ARCH_BITS-1:0] vAddr,
 		    end
 			end
 
+			assign translation = (physicalAddresses[rLine] & 32'hFFFFF000) | (vAddr & 32'h00000FFF);
 			assign rLine = vAddr[proc.ARCH_BITS-TAG_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS];
-			assign pAddr = _enable ? physicalAddresses[rLine] : vAddr;
+			assign pAddr = _enable ? translation : vAddr;
 			assign rTag = vAddr[proc.ARCH_BITS-1-:TAG_BITS];
 			assign rLineTag = virtualAddresses[rLine][proc.ARCH_BITS-1-:TAG_BITS];
 			assign valid = readReq ? (_enable ? (validBits[rLine] && (rTag == rLineTag)) :
