@@ -37,8 +37,8 @@ module registerFile(input clk, input rst,
 			for( i = 0; i < NUM_REGS; i=i+1 ) 
 				registers[i] = i;
 			registers[0+NUM_REGS] <= proc.USR_CODE_INIT;
-			registers[1+NUM_REGS] <= 32'hDEADBEEF;
-			registers[2+NUM_REGS] <= 32'hDEADBEEF;
+			registers[1+NUM_REGS] <= 32'h11111111;
+			registers[2+NUM_REGS] <= 32'h00000000;
 			registers[4+NUM_REGS] <= proc.PRIVILEGE_OS;
 		end
 	end

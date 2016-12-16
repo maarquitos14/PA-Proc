@@ -66,7 +66,8 @@ module rob(input clk, input rst, input clear,
     end
     else
     begin
-      _headIdx <= _headIdxNext;
+      _validBits[_headIdx] = 1'b0;
+      _headIdx = _headIdxNext;
     end
   end
 

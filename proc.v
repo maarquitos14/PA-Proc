@@ -588,16 +588,16 @@ module proc(input clk, input rst);
   rob reorderBuffer(clk, rst, clearROB,
                     /* Input from decode */
                     valid_decodeToROB, robIdx_decodeToROB, except_decodeToROB, pc_decodeToROB,
-                    pc_decodeToROB /*pc is the address*/, 32'hDEADBEEF /*data_decodeToROB*/, 5'b11111/*dst_decodeToROB*/, 1'b0/*we_decodeToROB*/,
+                    pc_decodeToROB /*pc is the address*/, 32'h11111111 /*data_decodeToROB*/, 5'b11111/*dst_decodeToROB*/, 1'b0/*we_decodeToROB*/,
                     /* Input from ALU (ADD, SUB) */
                     valid_aluToROB, robIdx_aluToROB, 1'b0 /* except_aluToROB */, pc_aluToROB,
-                    32'hDEADBEEF /* address_aluToROB */, data_aluToROB, dst_aluToROB, we_aluToROB,
+                    32'h11111111 /* address_aluToROB */, data_aluToROB, dst_aluToROB, we_aluToROB,
                     /* Input from MULTIPLIER (MUL) */
                     valid_multToROB, robIdx_multToROB, 1'b0 /* except_multToROB */, pc_multToROB,
-                    32'hDEADBEEF /* address_multToROB */, data_multToROB, dst_multToROB, 1'b1 /* we_multToROB */,
+                    32'h11111111 /* address_multToROB */, data_multToROB, dst_multToROB, 1'b1 /* we_multToROB */,
                     /* Input from dTLB (LDW, STW, LDB, STB) */
                     valid_DTLBToROB, robIdx_DTLBToROB, except_DTLBToROB, pc_DTLBToROB,
-                    address_DTLBToROB, 32'hDEADBEEF /*data_DTLBToROB*/, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/,
+                    address_DTLBToROB, 32'h11111111 /*data_DTLBToROB*/, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/,
                     /* Input from dCache (LDW, STW, LDB, STB) */
                     valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
                     address_dcToROB, data_dcToROB, dst_dcToROB, we_dcToROB,
