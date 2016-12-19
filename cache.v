@@ -158,33 +158,44 @@ module dataCache(input clk, input rst, input clear, input byte, input [proc.ARCH
              output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
              output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
 
-	wire [proc.ARCH_BITS-1:0] cacheRData;
-	wire cacheRValid, stbRValid, readMissValid;
-	wire readMiss, writeReq;
-	wire [proc.ARCH_BITS-1:0] readMissAddr, writeAddr;
-	wire [proc.ARCH_BITS-1:0] readMissDataWord;
-	wire [proc.MEMORY_LINE_BITS-1:0] readMissData, readSTBData, writeLine;
-	wire writeAck;
+  parameter STB_DATA_BITS = proc.ARCH_BITS + 1 /* Type of write */;
+
+	wire [proc.ARCH_BITS-1:0] _cacheRData;
+	wire _cacheRValid, _readMissValid;
+	wire _readMiss, writeReq;
+	wire [proc.ARCH_BITS-1:0] _readMissAddr, _writeAddr;
+	wire [proc.MEMORY_LINE_BITS-1:0] _readMissData, _writeLine;
+	wire _writeAck;
+  wire [STB_DATA_BITS-1:0] _wData;
+
+  wire [STB_DATA_BITS-1:0] _readDataSTB;
+  wire _readHitSTB;
+  wire _wReqSTB;
+  wire [STB_DATA_BITS-1:0] _wDataSTB;
+  wire [proc.ARCH_BITS-1:0] _wAddrSTB;
+  wire _wAckSTB;
+  wire _wByteCache;
+  wire [proc.ARCH_BITS-1:0] _wDataCache;
+
+  /* Store buffer for input writes */
+  stb storeBufferCache(clk, rst, clear, writeReq, wAddr, _wData, wAck, RE, rAddr, _readDataSTB, _readHitSTB, 
+			                 _wReqSTB, _wDataSTB, _wAddrSTB, _wAckSTB);
+  defparam storeBufferCache.DATA_BITS = STB_DATA_BITS;
 
 	/* Actual dataCache */
-	cache cacheDataInterface(clk, rst, byte, rAddr, wAddr, wData, WE, wAck, RE, cacheRData, cacheRValid, readMissAddr, 
-													 readMiss, readMissData, readMissValid, writeAddr, writeLine, writeReq, writeAck);
-	/* Store buffer */
-	stb storeBuffer(clk, rst, clear, writeReq, writeAddr, writeLine, writeAck, readMiss, readMissAddr, readSTBData, stbRValid, 
-			writeMemReq, writeMemLine, writeMemAddr, writeMemAck);
+	cache cacheDataInterface(clk, rst, _wByteCache, rAddr, _wAddrSTB, _wDataCache, _wReqSTB, _wAckSTB, RE, _cacheRData, _cacheRValid, _readMissAddr, 
+													 _readMiss, _readMissData, _readMissValid, writeMemAddr, writeMemLine, writeMemReq, writeMemAck);
 
-	assign readMemAddr = readMissAddr;
-	assign readMemReq = !stbRValid && readMiss;
+  assign _wData = { wData, byte };
+  assign _wByteCache = _wDataSTB[0:0];
+  assign _wDataCache = _wDataSTB[STB_DATA_BITS-1:1];
 
-	assign readMissData = stbRValid ? readSTBData : readMemData;
-	assign readMissValid = stbRValid || readMemLineValid;
+	assign readMemAddr = _readMissAddr;
+	assign readMemReq = !_readHitSTB && _readMiss;
 
-	//assign rOffsetW = readMissAddr[proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-1:
-  //proc.ARCH_BITS-cacheDataInterface.TAG_BITS-cacheDataInterface.LINE_BITS-cacheDataInterface.OFFSET_W_BITS];
-	//assign readMissDataWord = readMissData[(rOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
-	//assign rData = !readMiss ? cacheRData : readMissDataWord;
-	assign rData = cacheRData;
-	assign rValid = cacheRValid;
-	//assign rValid = ((cacheRValid != stbRValid) || readMemLineValid) && RE;
+	assign _readMissData = _readHitSTB ? _readDataSTB : readMemData;
+	assign _readMissValid = _readHitSTB || readMemLineValid;
+	assign rData = _cacheRData;
+	assign rValid = _cacheRValid;
 
 endmodule 

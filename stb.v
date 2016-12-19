@@ -1,17 +1,32 @@
-module stb(input clk, input rst, input clear,
-           input writeReq, input [proc.ARCH_BITS-1:0] wAddr, 
-           input [proc.MEMORY_LINE_BITS-1:0] wData, output wReqAck, 
-           input readReq, input [proc.ARCH_BITS-1:0] rAddr, 
-           output [proc.MEMORY_LINE_BITS-1:0] rData,  output rValid,
-           output wMemReq, output [proc.MEMORY_LINE_BITS-1:0] wDataMem,
-           output [proc.ARCH_BITS-1:0] wAddrMem, input wMemAck
+module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rData, rValid,
+           wMemReq, wDataMem, wAddrMem, wMemAck
 );
 
   /* When a load finds data in STB, the write in memory is done?*/
+  parameter DATA_BITS = 32,
+            ADDRESS_BITS = 32;
 
   parameter STB_SLOTS = 8,
             STB_IDX_BITS = 3;
 
+  /* Declare inputs and outputs */
+  input clk;
+  input rst;
+  input clear;
+  input writeReq;
+  input [ADDRESS_BITS-1:0] wAddr;
+  input [DATA_BITS-1:0] wData;
+  output wReqAck;
+  input readReq;
+  input [ADDRESS_BITS-1:0] rAddr;
+  output [DATA_BITS-1:0] rData;
+  output rValid;
+  output wMemReq;
+  output [DATA_BITS-1:0] wDataMem;
+  output [ADDRESS_BITS-1:0] wAddrMem;
+  input wMemAck;
+
+  /* Declare internal registers and wires */
   reg _validBits[STB_SLOTS-1:0];
   reg [proc.ARCH_BITS-1:0] _address[STB_SLOTS-1:0];
   reg [proc.MEMORY_LINE_BITS-1:0] _data[STB_SLOTS-1:0];
