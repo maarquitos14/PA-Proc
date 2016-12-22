@@ -8,13 +8,13 @@ module rob(input clk, input rst, input clear,
            /* Input port2 */
            input valid2, input [proc.ROB_IDX_BITS-1:0]robIdx2, input except2, input [proc.ARCH_BITS-1:0]pc2,
            input [proc.ARCH_BITS-1:0]address2, input [proc.ARCH_BITS-1:0]data2, input [proc.REG_IDX_BITS-1:0]dst2, input we2,
-           /* Input port3 */
+           /* Input port3 (Special: it holds writes to dCache) */
            input valid3, input [proc.ROB_IDX_BITS-1:0]robIdx3, input except3, input [proc.ARCH_BITS-1:0]pc3,
            input [proc.ARCH_BITS-1:0]address3, input [proc.ARCH_BITS-1:0]data3, input [proc.REG_IDX_BITS-1:0]dst3, input we3,
-           /* Input port4 (Special: it holds writes to dCache) */
+           input weMem3, input wMemByte3,
+           /* Input port4 */
            input valid4, input [proc.ROB_IDX_BITS-1:0]robIdx4, input except4, input [proc.ARCH_BITS-1:0]pc4,
            input [proc.ARCH_BITS-1:0]address4, input [proc.ARCH_BITS-1:0]data4, input [proc.REG_IDX_BITS-1:0]dst4, input we4,
-           input weMem4, input wMemByte4,
            /* Output to generate exceptions */
            output except, output [proc.ARCH_BITS-1:0]address, output [proc.ARCH_BITS-1:0]pc, output [proc.ARCH_BITS-1:0]type,
            /* Output to register file */
@@ -160,8 +160,8 @@ module rob(input clk, input rst, input clear,
         _validBits [robIdx3] <= 1'b1;
         _exceptBits[robIdx3] <= except3;
         _weBits    [robIdx3] <= we3;
-        _weMemBits [robIdx3] <= 1'b0;
-        _wMemByteBits [robIdx3] <= 1'b0;
+        _weMemBits [robIdx3] <= weMem3;
+        _wMemByteBits [robIdx3] <= wMemByte3;
         _address   [robIdx3] <= address3;
         _type      [robIdx3] <= TYPE_PORT3;
         _pc        [robIdx3] <= pc3;
@@ -182,8 +182,8 @@ module rob(input clk, input rst, input clear,
         _validBits [robIdx4] <= 1'b1;
         _exceptBits[robIdx4] <= except4;
         _weBits    [robIdx4] <= we4;
-        _weMemBits [robIdx0] <= weMem4;
-        _wMemByteBits [robIdx0] <= wMemByte4;
+        _weMemBits [robIdx4] <= 1'b0/*weMem4*/;
+        _wMemByteBits [robIdx4] <= 1'b0/*wMemByte4*/;
         _address   [robIdx4] <= address4;
         _type      [robIdx4] <= TYPE_PORT4;
         _pc        [robIdx4] <= pc4;

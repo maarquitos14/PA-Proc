@@ -1,8 +1,14 @@
-module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
-	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output wAck, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
-             output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
-             output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
-
+module cache(
+  /* General inputs */
+  input clk, input rst,
+  /* Read interface */
+  input RE, input rByte, input [proc.ARCH_BITS-1:0] rAddr, output [proc.ARCH_BITS-1:0] rData, output rValid,
+  /* Write interface */
+  input WE, input wByte, input [proc.ARCH_BITS-1:0] wAddr, input [proc.ARCH_BITS-1:0] wData, output wAck,
+  /* Memory interface */
+  output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
+  output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck
+);
 
 	parameter	CACHE_LINES			= 4,
 		 				CACHE_LINE_SIZE	= 128;
@@ -35,7 +41,7 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
 	// Info currently in cache
 	wire [CACHE_LINE_SIZE-1:0] rCurrentLine; 
 	wire [TAG_BITS-1:0] rCurrentTag; 
-	wire [proc.ARCH_BITS-1:0] rCurrentWord; 
+	wire [proc.ARCH_BITS-1:0] rCurrentWord, rCurrentByteExtended; 
 	wire readMiss;
 	
 	// Write handling variables
@@ -88,8 +94,8 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
 		begin: writes
 			integer offset, offsetB;
 			offset = (wOffsetW+1)*proc.ARCH_BITS-1;
-			offsetB = byte ? (proc.ARCH_BITS-1)-((wOffsetB+1)*proc.BYTE_BITS-1) : 0;
-			if(byte) 
+			offsetB = wByte ? (proc.ARCH_BITS-1)-((wOffsetB+1)*proc.BYTE_BITS-1) : 0;
+			if(wByte) 
 				lines[wLine][(offset-offsetB)-:proc.BYTE_BITS] = wData[proc.BYTE_BITS-1:0];
 			else
 				lines[wLine][offset-:proc.ARCH_BITS] = wData[proc.ARCH_BITS-1:0];
@@ -105,6 +111,7 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
 	assign rCurrentTag = tags[rLine];
   assign rCurrentLine = lines[rLine];
 	assign rCurrentWord = rCurrentLine[(rOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
+  assign rCurrentByteExtended = $signed( rCurrentWord[(rOffsetB+1)*proc.BYTE_BITS-1-:proc.BYTE_BITS] );
 	assign readMiss = RE && ((rCurrentTag != rTag) || (!validBits[rLine])); 
 
 	assign wTag = wAddr[proc.ARCH_BITS-1:proc.ARCH_BITS-TAG_BITS];
@@ -127,7 +134,7 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
 	// in readMemReq.
 	assign eviction = readMemReq && validBits[readMemLine] && dirtyBits[readMemLine];
 
-	assign rData = (WE && (rAddr == wAddr)) ? wData : rCurrentWord;
+	assign rData = rByte ? rCurrentByteExtended : rCurrentWord;
 	// if miss, go to memory and make it valid after receiving data
 	assign rValid = RE && !readMiss;
 	assign wAck = WE && !writeMiss;
@@ -141,61 +148,81 @@ module cache(input clk, input rst, input byte, input [proc.ARCH_BITS-1:0] rAddr,
   
 endmodule 
 
-module cacheIns(input clk, input rst, input [proc.ARCH_BITS-1:0] rAddr, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
-                output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemLine, input readMemLineValid);
+
+
+module cacheIns(
+  /* General inputs */
+  input clk, input rst,
+  /* Read interface */
+  input RE, input [proc.ARCH_BITS-1:0] rAddr, output [proc.ARCH_BITS-1:0] rData, output rValid,
+  /* Memory interface */
+  output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid
+);
 
   wire [proc.ARCH_BITS-1:0] nullAddr;
   wire [proc.MEMORY_LINE_BITS-1:0] nullLine;
   wire nullReq;
 	wire writeAck;
-  cache cacheInsInterface(clk, rst, 1'b0 /*byte*/, rAddr, 32'hffffffff, 32'hffffffff, 1'b0 /*WE*/, writeAck, RE, rData, rValid,
-                          readMemAddr, readMemReq, readMemLine, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/);
-
+  cache cacheInsInterface(
+    clk, rst,
+    RE, 1'b0 /*rByte*/, rAddr, rData, rValid,
+    1'b0 /*WE*/, 1'b0 /*wByte*/, 32'hffffffff, 32'hffffffff, writeAck,
+    readMemAddr, readMemReq, readMemData, readMemLineValid, nullAddr, nullLine, nullReq, 1'b0 /*WriteMemAck*/
+  );
 endmodule
 
-module dataCache(input clk, input rst, input clear, input byte, input [proc.ARCH_BITS-1:0] rAddr, input [proc.ARCH_BITS-1:0] wAddr, 
-	     			 input [proc.ARCH_BITS-1:0] wData, input WE, output wAck, input RE, output [proc.ARCH_BITS-1:0] rData, output rValid,
-             output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
-             output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck);
+module cacheData(
+  /* General inputs */
+  input clk, input rst,
+  /* Read interface */
+  input RE, input rByte, input [proc.ARCH_BITS-1:0] rAddr, output [proc.ARCH_BITS-1:0] rData, output rValid,
+  /* Write interface */
+  input WE, input wByte, input [proc.ARCH_BITS-1:0] wAddr, input [proc.ARCH_BITS-1:0] wData, output wAck,
+  /* Memory interface */
+  output [proc.ARCH_BITS-1:0] readMemAddr, output readMemReq, input [proc.MEMORY_LINE_BITS-1:0] readMemData, input readMemLineValid,
+  output [proc.ARCH_BITS-1:0] writeMemAddr, output [proc.MEMORY_LINE_BITS-1:0] writeMemLine, output writeMemReq, input writeMemAck
+);
 
   parameter STB_DATA_BITS = proc.ARCH_BITS + 1 /* Type of write */;
 
-	wire [proc.ARCH_BITS-1:0] _cacheRData;
-	wire _cacheRValid, _readMissValid;
-	wire _readMiss, writeReq;
-	wire [proc.ARCH_BITS-1:0] _readMissAddr, _writeAddr;
-	wire [proc.MEMORY_LINE_BITS-1:0] _readMissData, _writeLine;
-	wire _writeAck;
+	wire [proc.ARCH_BITS-1:0] _rDataCache, _rDataStbExtended, rDataMerged;
   wire [STB_DATA_BITS-1:0] _wData;
-
-  wire [STB_DATA_BITS-1:0] _readDataSTB;
-  wire _readHitSTB;
+  wire [STB_DATA_BITS-1:0] _rDataSTB;
+  wire _rHitSTB, _rValidSTB, _rValidCache;
   wire _wReqSTB;
   wire [STB_DATA_BITS-1:0] _wDataSTB;
-  wire [proc.ARCH_BITS-1:0] _wAddrSTB;
+  wire [proc.ARCH_BITS-1:0] _wAddrSTB, _rAddrSTB;
   wire _wAckSTB;
   wire _wByteCache;
   wire [proc.ARCH_BITS-1:0] _wDataCache;
 
   /* Store buffer for input writes */
-  stb storeBufferCache(clk, rst, clear, writeReq, wAddr, _wData, wAck, RE, rAddr, _readDataSTB, _readHitSTB, 
+  stb storeBufferCache(clk, rst, 1'b0 /*clear*/, WE, wAddr, _wData, wAck, RE, rAddr, _rDataSTB, _rAddrSTB, _rValidSTB, 
 			                 _wReqSTB, _wDataSTB, _wAddrSTB, _wAckSTB);
   defparam storeBufferCache.DATA_BITS = STB_DATA_BITS;
 
 	/* Actual dataCache */
-	cache cacheDataInterface(clk, rst, _wByteCache, rAddr, _wAddrSTB, _wDataCache, _wReqSTB, _wAckSTB, RE, _cacheRData, _cacheRValid, _readMissAddr, 
-													 _readMiss, _readMissData, _readMissValid, writeMemAddr, writeMemLine, writeMemReq, writeMemAck);
+	cache cacheDataInterface(
+    clk, rst,
+    RE, rByte, rAddr, _rDataCache, _rValidCache,
+    _wReqSTB, _wByteCache, _wAddrSTB, _wDataCache, _wAckSTB,
+    readMemAddr, readMemReq, readMemData, readMemLineValid, writeMemAddr, writeMemLine, writeMemReq, writeMemAck
+  );
 
-  assign _wData = { wData, byte };
+  /* Writes from STB to Cache */
+  assign _wData = { wData, wByte };
   assign _wByteCache = _wDataSTB[0:0];
   assign _wDataCache = _wDataSTB[STB_DATA_BITS-1:1];
 
-	assign readMemAddr = _readMissAddr;
-	assign readMemReq = !_readHitSTB && _readMiss;
-
-	assign _readMissData = _readHitSTB ? _readDataSTB : readMemData;
-	assign _readMissValid = _readHitSTB || readMemLineValid;
-	assign rData = _cacheRData;
-	assign rValid = _cacheRValid;
-
+	/* Handle reads that hit in the STB */
+  assign _rHitSTB = _rValidSTB ? ( _rDataSTB[0:0] == rByte ) : 1'b0;
+  assign _rDataStbExtended = _rDataSTB[0:0] ? $signed( _rDataSTB[proc.BYTE_BITS-1:1] ) : _rDataSTB[STB_DATA_BITS-1:1];
+  assign _rDataMerged = {
+    _rAddrSTB[1:0] == 2'b11 ? _rDataSTB[31:24] : _rDataCache[31:24],
+    _rAddrSTB[1:0] == 2'b10 ? _rDataSTB[23:16] : _rDataCache[23:16],
+    _rAddrSTB[1:0] == 2'b01 ? _rDataSTB[15:8]  : _rDataCache[15:8],
+    _rAddrSTB[1:0] == 2'b00 ? _rDataSTB[7:0]   : _rDataCache[7:0]
+  };
+	assign rData = _rHitSTB ? _rDataStbExtended : ( _rValidSTB ? _rDataMerged : _rDataCache );
+	assign rValid = _rHitSTB || _rValidCache;
 endmodule 
