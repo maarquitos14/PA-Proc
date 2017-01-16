@@ -1,5 +1,4 @@
 //`timescale 1ns / 10ps
-
 module proc(input clk, input rst);
 
 	// Architecture constants
@@ -133,13 +132,10 @@ module proc(input clk, input rst);
   reg enableICache;
 
 	//DCache
-	wire byteCache;
+	wire rByteDCache;
 	reg [ARCH_BITS-1:0] dCacheAddr;
-	reg [ARCH_BITS-1:0] wDataDCache;
 	reg [ARCH_BITS-1:0] regDstDCache;
-	wire WEDCache;
 	wire REDCache;
-	wire [ARCH_BITS-1:0] rDataDCacheByte;
 	wire [ARCH_BITS-1:0] rDataDCache;
 	wire rValidDCache;
 	wire [ARCH_BITS-1:0] readMemAddrDCache;
@@ -150,7 +146,6 @@ module proc(input clk, input rst);
 	wire [MEMORY_LINE_BITS-1:0] writeMemLine;
 	wire writeMemReq;
 	wire memoryStallDCache;
-	wire wAck;
 	wire memWriteDone;
   reg  [ROB_IDX_BITS-1:0] robIdxDCache;
   reg  [ARCH_BITS-1:0] pcDCache;
@@ -160,8 +155,10 @@ module proc(input clk, input rst);
   wire [ARCH_BITS-1:0] address_dcToROB;
   wire [ARCH_BITS-1:0] data_dcToROB;
   wire [REG_IDX_BITS-1:0] dst_dcToROB;
-  wire we_dcToROB;
+  wire weReg_dcToROB;
 	reg  enableDCache;
+  wire [ARCH_BITS-1:0] wAddr_RobToDC, wData_RobToDC;
+  wire wByte_RobToDC, we_RobToDC;
 
   // Multiplier
   wire clearMult;
@@ -206,8 +203,9 @@ module proc(input clk, input rst);
   reg  [ROB_IDX_BITS-1:0] robIdxDTLB;
 	reg  wTLBTypeDTLB;
   wire [ROB_IDX_BITS-1:0] robIdx_DTLBToROB;
-	wire [ARCH_BITS-1:0] pc_DTLBToROB, address_DTLBToROB;
-	wire readReqDTLB, writeReqDTLB, validDTLB, ackDTLB, valid_DTLBToROB, except_DTLBTOROB;
+	wire [ARCH_BITS-1:0] pc_DTLBToROB, address_DTLBToROB, wData_DTLBToROB;
+  wire valid_DTLBToROB, except_DTLBTOROB, weMem_DTLBToROB, wByte_DTLBToROB;
+	wire readReqDTLB, writeReqDTLB, validDTLB, ackDTLB;
   wire enableDTLB;
 	wire enableDTLBToDCache;
 	wire [ARCH_BITS-1:0] pAddrDTLBToDCache, srcB2DTLBToDCache, regDstDTLBToDCache, 
@@ -283,7 +281,11 @@ module proc(input clk, input rst);
 		end
 	end
 	
-	cacheIns iCache(clk, rst, pcPhyFetch, enableICache, instFetch, instFetchValid, readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache);
+	cacheIns iCache(
+    clk, rst,
+    enableICache, pcPhyFetch, instFetch, instFetchValid,
+    readMemAddrICache, readMemReqICache, memDataICache, readMemDataValidICache
+  );
   
 	assign stallFetchToDecode = memoryStallDCache;
 	assign instFetchToDecode = (exceptROB || !enableICache) ? NOP_INSTRUCTION : (stallFetchToDecode ? instDecode : 
@@ -335,18 +337,20 @@ module proc(input clk, input rst);
   assign pc_decodeToROB = pcDecode;
 	assign except_decodeToROB = iTLBExceptDecode;
 	
-	registerFile regs(clk, rst, 
-									  /* Input Port A */
-										regSrc1, regSrc2, specialSrc1, 1'b0 /*specialSrc2*/, regDstWB, 1'b0 /*specialDst*/, wDataWB, writeEnableWB, 
-										/* Input Port B -> rm0 */
-										exceptPcROB,
-										/* Input Port C -> rm1 */
-										exceptAddrROB,
-										/* Input Port D -> rm2 */
-										exceptTypeROB,
-										/* Input Port E -> rm4 */
-										modeRegData, specialRegsWE, 
-										data1Decode, data2Decode, currentMode);
+	registerFile regs(
+    clk, rst, 
+		/* Input Port A */
+		regSrc1, regSrc2, specialSrc1, 1'b0 /*specialSrc2*/, regDstWB, 1'b0 /*specialDst*/, wDataWB, writeEnableWB, 
+		/* Input Port B -> rm0 */
+		exceptPcROB,
+		/* Input Port C -> rm1 */
+		exceptAddrROB,
+		/* Input Port D -> rm2 */
+		exceptTypeROB,
+		/* Input Port E -> rm4 */
+		modeRegData, specialRegsWE, 
+		data1Decode, data2Decode, currentMode
+  );
 	
 	assign offset20 = offset+(offsetHi<<15);
 	assign offset15 =	offsetLo+(offsetHi<<10);
@@ -492,15 +496,18 @@ module proc(input clk, input rst);
 	assign except_DTLBToROB = !validDTLB && (opcodeDTLB != OPCODE_TLBWRITE);
   assign pc_DTLBToROB = pcDTLB;
   assign robIdx_DTLBToROB = robIdxDTLB;
-  assign valid_DTLBToROB = (((opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) ||
-                            (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW)) && !validDTLB) ||
-														opcodeDTLB == OPCODE_TLBWRITE;
-  assign address_DTLBToROB = vAddrDTLB;
+  assign valid_DTLBToROB = !stallDTLBToDCache && ((!validDTLB &&
+    ((opcodeDTLB == OPCODE_STB) || (opcodeDTLB == OPCODE_STW) ||
+     (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW))) ||
+		(opcodeDTLB == OPCODE_TLBWRITE || opcodeDTLB == OPCODE_STB || opcodeDTLB == OPCODE_STW));
+  assign wData_DTLBToROB = wAddrDTLB;
+  assign address_DTLBToROB = validDTLB ? pAddrDTLB : vAddrDTLB;
+  assign weMem_DTLBToROB = validDTLB && (opcodeDTLB == OPCODE_STB || opcodeDTLB == OPCODE_STW);
+  assign wByte_DTLBToROB = (opcodeDTLB == OPCODE_STB || opcodeDTLB == OPCODE_LDB);
 	
 	assign stallDTLBToDCache = memoryStallDCache;
 	assign opcodeDTLBToDCache = exceptROB ? OPCODE_NOP : (stallDTLBToDCache ? opcodeDCache : opcodeDTLB);
 	assign pAddrDTLBToDCache  = stallDTLBToDCache ? dCacheAddr : pAddrDTLB;
-	assign srcB2DTLBToDCache  = stallDTLBToDCache ? wDataDCache : wAddrDTLB;
 	assign regDstDTLBToDCache = stallDTLBToDCache ? regDstDCache : regDstDTLB;
 	assign pcDTLBToDCache = stallDTLBToDCache ? pcDCache : pcDTLB;
 	assign robIdxDTLBToDCache = stallDTLBToDCache ? robIdxDCache : robIdxDTLB;
@@ -518,40 +525,35 @@ module proc(input clk, input rst);
 			opcodeDCache <= opcodeDTLBToDCache;
 		end
 			dCacheAddr <= pAddrDTLBToDCache;
-			wDataDCache <= srcB2DTLBToDCache;
 			regDstDCache <= regDstDTLBToDCache;
 			pcDCache <= pcDTLBToDCache;
 			robIdxDCache <= robIdxDTLBToDCache;
 			enableDCache <= enableDTLBToDCache;
 	end
 
-	assign WEDCache = enableDCache && ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW));
 	assign REDCache = enableDCache && ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW));
-	assign byteCache = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_STB));
+	assign rByteDCache = (opcodeDCache == OPCODE_LDB || opcodeDCache == OPCODE_STB);
 
-	dataCache dCache(clk, rst, 1'b0 /* clearSTB */, byteCache, dCacheAddr, dCacheAddr, wDataDCache, 
-									 WEDCache, wAck, REDCache, rDataDCache, rValidDCache, readMemAddrDCache, readMemReqDCache, 
-									 memDataDCache, readMemDataValidDCache, writeMemAddr, writeMemLine, writeMemReq, memWriteDone);
-
+	cacheData dCache(
+    clk, rst, 
+    REDCache, rByteDCache, dCacheAddr, rDataDCache, rValidDCache,
+    we_RobToDC, wByte_RobToDC, wAddr_RobToDC, wData_RobToDC, wAckDCache,
+    readMemAddrDCache, readMemReqDCache, memDataDCache, readMemDataValidDCache,
+    writeMemAddr, writeMemLine, writeMemReq, memWriteDone
+  );
 
 	// If cache miss, stall.
 	assign memoryStallDCache = enableDCache && (((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && 
- 															!rValidDCache) || (!wAck && 
-															((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW)));
+ 															!rValidDCache);
 
   // Set input port of ROB from dCache
-  assign valid_dcToROB = ((opcodeDCache == OPCODE_STB) || (opcodeDCache == OPCODE_STW) ||
-                          (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && !memoryStallDCache;
+  assign valid_dcToROB = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && !memoryStallDCache;
   assign robIdx_dcToROB = robIdxDCache;
   assign pc_dcToROB = pcDCache;
   assign address_dcToROB = dCacheAddr;
-	assign rDataDCacheByte = ((dCacheAddr[1:0] == 2'b00) ? $signed(rDataDCache[7:0]) :
-														((dCacheAddr[1:0] == 2'b01) ? $signed(rDataDCache[15:8]) :
-														 ((dCacheAddr[1:0] == 2'b10) ? $signed(rDataDCache[23:16]) :
-														  $signed(rDataDCache[31:24]))));
-  assign data_dcToROB = (opcodeDCache == OPCODE_LDB) ? rDataDCacheByte : rDataDCache;
+  assign data_dcToROB = rDataDCache;
   assign dst_dcToROB = regDstDCache;
-  assign we_dcToROB = (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW);
+  assign weReg_dcToROB = (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW);
 
   // Update input values of multiplier
 	always @(posedge clk)
@@ -585,26 +587,30 @@ module proc(input clk, input rst);
   assign dst_multToROB = regDstMultOut;
 
   // Reorder buffer
-  rob reorderBuffer(clk, rst, clearROB,
-                    /* Input from decode */
-                    valid_decodeToROB, robIdx_decodeToROB, except_decodeToROB, pc_decodeToROB,
-                    pc_decodeToROB /*pc is the address*/, 32'h11111111 /*data_decodeToROB*/, 5'b11111/*dst_decodeToROB*/, 1'b0/*we_decodeToROB*/,
-                    /* Input from ALU (ADD, SUB) */
-                    valid_aluToROB, robIdx_aluToROB, 1'b0 /* except_aluToROB */, pc_aluToROB,
-                    32'h11111111 /* address_aluToROB */, data_aluToROB, dst_aluToROB, we_aluToROB,
-                    /* Input from MULTIPLIER (MUL) */
-                    valid_multToROB, robIdx_multToROB, 1'b0 /* except_multToROB */, pc_multToROB,
-                    32'h11111111 /* address_multToROB */, data_multToROB, dst_multToROB, 1'b1 /* we_multToROB */,
-                    /* Input from dTLB (LDW, STW, LDB, STB) */
-                    valid_DTLBToROB, robIdx_DTLBToROB, except_DTLBToROB, pc_DTLBToROB,
-                    address_DTLBToROB, 32'h11111111 /*data_DTLBToROB*/, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/,
-                    /* Input from dCache (LDW, STW, LDB, STB) */
-                    valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
-                    address_dcToROB, data_dcToROB, dst_dcToROB, we_dcToROB,
-                    /* Exceptions output */
-                    exceptROB, exceptAddrROB, exceptPcROB, exceptTypeROB,
-                    /* Output to register file */
-                    regDstWB, wDataWB, writeEnableWB);
+  rob reorderBuffer(
+    clk, rst, clearROB,
+    /* Input from decode */
+      valid_decodeToROB, robIdx_decodeToROB, except_decodeToROB, pc_decodeToROB,
+      pc_decodeToROB /*pc is the address*/, 32'h11111111 /*data_decodeToROB*/, 5'b11111/*dst_decodeToROB*/, 1'b0/*we_decodeToROB*/,
+    /* Input from ALU (ADD, SUB) */
+      valid_aluToROB, robIdx_aluToROB, 1'b0 /* except_aluToROB */, pc_aluToROB,
+      32'h11111111 /* address_aluToROB */, data_aluToROB, dst_aluToROB, we_aluToROB,
+    /* Input from MULTIPLIER (MUL) */
+      valid_multToROB, robIdx_multToROB, 1'b0 /* except_multToROB */, pc_multToROB,
+      32'h11111111 /* address_multToROB */, data_multToROB, dst_multToROB, 1'b1 /* we_multToROB */,
+    /* Input from dTLB (LDW, STW, LDB, STB, TLBW) */
+      valid_DTLBToROB, robIdx_DTLBToROB, except_DTLBToROB, pc_DTLBToROB,
+      address_DTLBToROB, wData_DTLBToROB, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/, weMem_DTLBToROB, wByte_DTLBToROB,
+    /* Input from dCache (LDW, STW) */
+      valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
+      address_dcToROB, data_dcToROB, dst_dcToROB, weReg_dcToROB,
+    /* Exceptions output */
+       exceptROB, exceptAddrROB, exceptPcROB, exceptTypeROB,
+    /* Output to register file */
+       regDstWB, wDataWB, writeEnableWB,
+    /* Interface to dCache */
+       wAddr_RobToDC, wData_RobToDC, wByte_RobToDC, we_RobToDC
+  );
 
   assign clearROB = exceptROB;
   assign clearMult = exceptROB;

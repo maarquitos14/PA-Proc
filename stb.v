@@ -1,17 +1,35 @@
-module stb(input clk, input rst, input clear,
-           input writeReq, input [proc.ARCH_BITS-1:0] wAddr, 
-           input [proc.MEMORY_LINE_BITS-1:0] wData, output wReqAck, 
-           input readReq, input [proc.ARCH_BITS-1:0] rAddr, 
-           output [proc.MEMORY_LINE_BITS-1:0] rData,  output rValid,
-           output wMemReq, output [proc.MEMORY_LINE_BITS-1:0] wDataMem,
-           output [proc.ARCH_BITS-1:0] wAddrMem, input wMemAck
+module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rData, rAddrOut, rValid,
+           wMemReq, wDataMem, wAddrMem, wMemAck
 );
 
   /* When a load finds data in STB, the write in memory is done?*/
+  parameter DATA_BITS = 32,
+            DATA_BYTES = DATA_BITS/8,
+            BYTE_IDX_BITS = 2, // log2(DATA_BYTES)
+            ADDRESS_BITS = 32;
 
   parameter STB_SLOTS = 8,
             STB_IDX_BITS = 3;
 
+  /* Declare inputs and outputs */
+  input clk;
+  input rst;
+  input clear;
+  input writeReq;
+  input [ADDRESS_BITS-1:0] wAddr;
+  input [DATA_BITS-1:0] wData;
+  output wReqAck;
+  input readReq;
+  input [ADDRESS_BITS-1:0] rAddr;
+  output [DATA_BITS-1:0] rData;
+  output [ADDRESS_BITS-1:0] rAddrOut;
+  output rValid;
+  output wMemReq;
+  output [DATA_BITS-1:0] wDataMem;
+  output [ADDRESS_BITS-1:0] wAddrMem;
+  input wMemAck;
+
+  /* Declare internal registers and wires */
   reg _validBits[STB_SLOTS-1:0];
   reg [proc.ARCH_BITS-1:0] _address[STB_SLOTS-1:0];
   reg [proc.MEMORY_LINE_BITS-1:0] _data[STB_SLOTS-1:0];
@@ -44,6 +62,7 @@ module stb(input clk, input rst, input clear,
 	/* Set DCACHE outputs */
 	assign rValid = readReq && ((loadIndex != -1) && _validBits[loadIndex]);
 	assign rData = _data[loadIndex];
+  assign rAddrOut = _address[loadIndex];
 	assign wReqAck = _validBits[_stbIdx] || ( writeReq && _writeReqPrev && wAddr == _wAddrPrev );
 	/* End set DCACHE outputs */
 
@@ -102,7 +121,7 @@ module stb(input clk, input rst, input clear,
 				loadIndex = -1;
 				for( i=0; (i < STB_SLOTS) && (loadIndex == -1); i=i+1)
 				begin
-					loadIndex = (_address[i] == rAddr) ? i : loadIndex;
+					loadIndex = (_address[i][ADDRESS_BITS-1:BYTE_IDX_BITS] == rAddr[ADDRESS_BITS-1:BYTE_IDX_BITS]) ? i : loadIndex;
 	      end
 			end
     end
