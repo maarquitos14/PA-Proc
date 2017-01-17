@@ -185,10 +185,10 @@ module cacheData(
 
   parameter STB_DATA_BITS = proc.ARCH_BITS + 1 /* Type of write */;
 
-	wire [proc.ARCH_BITS-1:0] _rDataCache, _rDataStbExtended, rDataMerged;
+	wire [proc.ARCH_BITS-1:0] _rDataCache, _rDataSTB_idem, _rDataSTB_ww_rb;
   wire [STB_DATA_BITS-1:0] _wData;
   wire [STB_DATA_BITS-1:0] _rDataSTB;
-  wire _rHitSTB, _rValidSTB, _rValidCache;
+  wire _rHitSTB, _rMatchSTB_idem, _rMatchSTB_ww_rb, _rValidCache;
   wire _wReqSTB;
   wire [STB_DATA_BITS-1:0] _wDataSTB;
   wire [proc.ARCH_BITS-1:0] _wAddrSTB, _rAddrSTB;
@@ -197,11 +197,11 @@ module cacheData(
   wire [proc.ARCH_BITS-1:0] _wDataCache;
 
   /* Store buffer for input writes */
-  stb storeBufferCache(clk, rst, 1'b0 /*clear*/, WE, wAddr, _wData, wAck, RE, rAddr, _rDataSTB, _rAddrSTB, _rValidSTB, 
+  stb storeBufferCache(clk, rst, 1'b0 /*clear*/, WE, wAddr, _wData, wAck, RE, rAddr, _rDataSTB, _rAddrSTB, _rHitSTB, 
 			                 _wReqSTB, _wDataSTB, _wAddrSTB, _wAckSTB);
   defparam storeBufferCache.DATA_BITS = STB_DATA_BITS;
 
-	/* Actual dataCache */
+	/* DataCache */
 	cache cacheDataInterface(
     clk, rst,
     RE, rByte, rAddr, _rDataCache, _rValidCache,
@@ -209,20 +209,22 @@ module cacheData(
     readMemAddr, readMemReq, readMemData, readMemLineValid, writeMemAddr, writeMemLine, writeMemReq, writeMemAck
   );
 
-  /* Writes from STB to Cache */
+  /* Writes to STB */
   assign _wData = { wData, wByte };
+
+  /* Writes from STB to Cache */
   assign _wByteCache = _wDataSTB[0:0];
   assign _wDataCache = _wDataSTB[STB_DATA_BITS-1:1];
 
 	/* Handle reads that hit in the STB */
-  assign _rHitSTB = _rValidSTB ? ( _rDataSTB[0:0] == rByte ) : 1'b0;
-  assign _rDataStbExtended = _rDataSTB[0:0] ? $signed( _rDataSTB[proc.BYTE_BITS-1:1] ) : _rDataSTB[STB_DATA_BITS-1:1];
-  assign _rDataMerged = {
-    _rAddrSTB[1:0] == 2'b11 ? _rDataSTB[31:24] : _rDataCache[31:24],
-    _rAddrSTB[1:0] == 2'b10 ? _rDataSTB[23:16] : _rDataCache[23:16],
-    _rAddrSTB[1:0] == 2'b01 ? _rDataSTB[15:8]  : _rDataCache[15:8],
-    _rAddrSTB[1:0] == 2'b00 ? _rDataSTB[7:0]   : _rDataCache[7:0]
-  };
-	assign rData = _rHitSTB ? _rDataStbExtended : ( _rValidSTB ? _rDataMerged : _rDataCache );
-	assign rValid = _rHitSTB || _rValidCache;
+  // Write in STB matches the read type
+  assign _rMatchSTB_idem  = ( _rHitSTB && (_rDataSTB[0:0] == rByte) && (rAddr == _rAddrSTB) );
+  assign _rDataSTB_idem   = _rDataSTB[0:0] ? $signed( _rDataSTB[proc.BYTE_BITS:1] ) : _rDataSTB[STB_DATA_BITS-1:1];
+  // Write in STB is WORD and read is BYTE
+  assign _rMatchSTB_ww_rb = ( _rHitSTB && rByte && !_rDataSTB[0:0] );
+  assign _rDataSTB_ww_rb  = $signed( _rDataSTB[(rAddr[1:0]+1)*proc.BYTE_BITS-:proc.BYTE_BITS] );
+  assign rData = _rMatchSTB_idem ? _rDataSTB_idem : ( _rMatchSTB_ww_rb ? _rDataSTB_ww_rb : _rDataCache );
+  // When read is WORD and STB has BYTE writes we need to wait
+  assign rValid = _rMatchSTB_idem || _rMatchSTB_ww_rb || ( _rValidCache && !_rHitSTB );
+
 endmodule 

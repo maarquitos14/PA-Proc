@@ -15,11 +15,14 @@ module rob(input clk, input rst, input clear,
            /* Input port4 */
            input valid4, input [proc.ROB_IDX_BITS-1:0]robIdx4, input except4, input [proc.ARCH_BITS-1:0]pc4,
            input [proc.ARCH_BITS-1:0]address4, input [proc.ARCH_BITS-1:0]data4, input [proc.REG_IDX_BITS-1:0]dst4, input we4,
+           /* Inout to check if ROB has write to some memory address */
+           input readReq, input [proc.ARCH_BITS-1:0]rAddr,
+           output [proc.ARCH_BITS-1:0]rData, output [proc.ARCH_BITS-1:0]rAddrOut, output rByteOut, output rHit,
            /* Output to generate exceptions */
            output except, output [proc.ARCH_BITS-1:0]address, output [proc.ARCH_BITS-1:0]pc, output [proc.ARCH_BITS-1:0]type,
            /* Output to register file */
            output [proc.REG_IDX_BITS-1:0]wDstReg, output [proc.ARCH_BITS-1:0]wDataReg, output wEnableReg,
-           /* Interface to dCache */
+           /* Output to dCache */
            output [proc.ARCH_BITS-1:0]wAddressMem, output [proc.ARCH_BITS-1:0]wDataMem, output wByteMem, output wEnableMem
 );
 
@@ -28,6 +31,8 @@ module rob(input clk, input rst, input clear,
             TYPE_PORT2 = 4,
             TYPE_PORT3 = 8,
             TYPE_PORT4 = 16;
+
+  parameter BYTE_IDX_BITS = 2; // log2(proc.ARCH_BITS/proc.BYTE_BITS)
 
   reg                         _validBits[proc.ROB_SLOTS-1:0];
   reg                         _exceptBits[proc.ROB_SLOTS-1:0];
@@ -42,8 +47,8 @@ module rob(input clk, input rst, input clear,
 
   reg  [proc.ROB_IDX_BITS-1:0]_headIdx;
   wire [proc.ROB_IDX_BITS-1:0]_headIdxNext;
-  wire _validHead;
-  integer i;
+  wire                        _validHead;
+  integer                     _i, _rIdx;
 
   /* Set internal variables */
     assign _validHead = _validBits[_headIdx];
@@ -51,6 +56,10 @@ module rob(input clk, input rst, input clear,
   /* End set internal variables */
 
   /* Set outputs */
+    assign rData = _wDataReg[_rIdx];
+    assign rAddrOut = _address[_rIdx];
+    assign rByteOut = _wMemByteBits[_rIdx];
+    assign rHit = readReq && ((_rIdx != -1) && _validBits[_rIdx]);
     assign except = _validHead ? _exceptBits[_headIdx] : 1'b0;
     assign address = _address[_headIdx];
     assign type = _type[_headIdx];
@@ -71,15 +80,46 @@ module rob(input clk, input rst, input clear,
     begin
       // Clean the memory
       _headIdx <= 4'b0000;
-      for( i = 0; i < proc.ROB_SLOTS; i=i+1 ) 
+      for( _i = 0; _i < proc.ROB_SLOTS; _i=_i+1 ) 
       begin
-        _validBits[i] = 1'b0;
+        _validBits[_i] = 1'b0;
       end
     end
     else
     begin
       _validBits[_headIdx] = 1'b0;
       _headIdx = _headIdxNext;
+    end
+  end
+
+  // Handle reads
+  always @(posedge clk, readReq, rAddr, _headIdx)
+  begin
+    if(!rst)
+    begin
+      if (readReq)
+      begin
+        _rIdx = -1;
+        // NOTE: First iteration done outside to allow the used for condition
+        _i = _headIdx;
+        if (_validBits[_i])
+        begin
+          if (_weMemBits[_i] && _address[_i][proc.ARCH_BITS-1:BYTE_IDX_BITS] == rAddr[proc.ARCH_BITS-1:BYTE_IDX_BITS])
+          begin
+            _rIdx = _i;
+          end
+        end
+        for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+        begin
+          if (_validBits[_i])
+          begin
+            if (_weMemBits[_i] && _address[_i][proc.ARCH_BITS-1:BYTE_IDX_BITS] == rAddr[proc.ARCH_BITS-1:BYTE_IDX_BITS])
+            begin
+              _rIdx = _i;
+            end
+          end
+        end
+			end
     end
   end
 
@@ -182,8 +222,8 @@ module rob(input clk, input rst, input clear,
         _validBits [robIdx4] <= 1'b1;
         _exceptBits[robIdx4] <= except4;
         _weBits    [robIdx4] <= we4;
-        _weMemBits [robIdx4] <= 1'b0/*weMem4*/;
-        _wMemByteBits [robIdx4] <= 1'b0/*wMemByte4*/;
+        _weMemBits [robIdx4] <= 1'b0;
+        _wMemByteBits [robIdx4] <= 1'b0;
         _address   [robIdx4] <= address4;
         _type      [robIdx4] <= TYPE_PORT4;
         _pc        [robIdx4] <= pc4;

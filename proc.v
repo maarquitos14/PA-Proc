@@ -159,6 +159,8 @@ module proc(input clk, input rst);
 	reg  enableDCache;
   wire [ARCH_BITS-1:0] wAddr_RobToDC, wData_RobToDC;
   wire wByte_RobToDC, we_RobToDC;
+  wire rMatchROB_idem, rMatchROB_ww_rb, rMatchDCache;
+  wire [ARCH_BITS-1:0] rDataROB_idem, rDataSTB_ww_rb;
 
   // Multiplier
   wire clearMult;
@@ -185,6 +187,9 @@ module proc(input clk, input rst);
 	wire [ARCH_BITS-1:0] exceptTypeROB;
   wire [ARCH_BITS-1:0] exceptAddrROB;
   wire [ARCH_BITS-1:0] exceptPcROB;
+  wire [ARCH_BITS-1:0] rDataROB;
+  wire [ARCH_BITS-1:0] rAddrROB;
+  wire rByteROB, rHitROB;
 
   // WB stage
   wire [REG_IDX_BITS-1:0] regDstWB;
@@ -542,16 +547,26 @@ module proc(input clk, input rst);
     writeMemAddr, writeMemLine, writeMemReq, memWriteDone
   );
 
-	// If cache miss, stall.
+
+	/* Handle reads that hit in the ROB */
+  // Write in ROB matches the read type
+  assign rMatchROB_idem  = ( rHitROB && (rByteROB == rByteDCache) && (dCacheAddr == rAddrROB) );
+  assign rDataROB_idem   = rByteROB ? $signed( rDataROB[BYTE_BITS-1:0] ) : rDataROB;
+  // Write in ROB is WORD and read is BYTE
+  assign rMatchROB_ww_rb = ( rHitROB && rByteDCache && !rByteROB );
+  assign rDataROB_ww_rb  = $signed( rDataROB[(dCacheAddr[1:0]+1)*proc.BYTE_BITS-1-:proc.BYTE_BITS] );
+
+	// Miss?
+  assign rMatchDCache = rMatchROB_idem || rMatchROB_ww_rb || ( rValidDCache && !rHitROB );
 	assign memoryStallDCache = enableDCache && (((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && 
- 															!rValidDCache);
+ 															!rMatchDCache);
 
   // Set input port of ROB from dCache
   assign valid_dcToROB = ((opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW)) && !memoryStallDCache;
   assign robIdx_dcToROB = robIdxDCache;
   assign pc_dcToROB = pcDCache;
   assign address_dcToROB = dCacheAddr;
-  assign data_dcToROB = rDataDCache;
+  assign data_dcToROB = rMatchROB_idem ? rDataROB_idem : ( rMatchROB_ww_rb ? rDataROB_ww_rb : rDataDCache );
   assign dst_dcToROB = regDstDCache;
   assign weReg_dcToROB = (opcodeDCache == OPCODE_LDB) || (opcodeDCache == OPCODE_LDW);
 
@@ -601,14 +616,17 @@ module proc(input clk, input rst);
     /* Input from dTLB (LDW, STW, LDB, STB, TLBW) */
       valid_DTLBToROB, robIdx_DTLBToROB, except_DTLBToROB, pc_DTLBToROB,
       address_DTLBToROB, wData_DTLBToROB, 5'b11111/*dst_DTLBToROB*/, 1'b0/*we_DTLBToROB*/, weMem_DTLBToROB, wByte_DTLBToROB,
-    /* Input from dCache (LDW, STW) */
+    /* Input from dCache (LDW, LDB) */
       valid_dcToROB, robIdx_dcToROB, 1'b0 /* except_dcToROB */, pc_dcToROB,
       address_dcToROB, data_dcToROB, dst_dcToROB, weReg_dcToROB,
-    /* Exceptions output */
+    /* Inout to check if ROB contains write to some memory address */
+      REDCache, dCacheAddr,
+      rDataROB, rAddrROB, rByteROB, rHitROB,
+    /* Output exceptions */
        exceptROB, exceptAddrROB, exceptPcROB, exceptTypeROB,
     /* Output to register file */
        regDstWB, wDataWB, writeEnableWB,
-    /* Interface to dCache */
+    /* Output to dCache */
        wAddr_RobToDC, wData_RobToDC, wByte_RobToDC, we_RobToDC
   );
 

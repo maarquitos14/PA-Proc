@@ -1,4 +1,4 @@
-module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rData, rAddrOut, rValid,
+module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rData, rAddrOut, rHit,
            wMemReq, wDataMem, wAddrMem, wMemAck
 );
 
@@ -23,7 +23,7 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
   input [ADDRESS_BITS-1:0] rAddr;
   output [DATA_BITS-1:0] rData;
   output [ADDRESS_BITS-1:0] rAddrOut;
-  output rValid;
+  output rHit;
   output wMemReq;
   output [DATA_BITS-1:0] wDataMem;
   output [ADDRESS_BITS-1:0] wAddrMem;
@@ -53,18 +53,22 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
   assign _stbIdxNext = _writeReqNew ? (_stbIdx + 1)%STB_SLOTS : _stbIdx;
   assign _wAddrPrevNext = writeReq ? wAddr : 0;
 
-  /* Set MEM outputs */
+  /* Set push outputs */
+  // Head is valid or the push requests is the same in the previous cycle
+	assign wReqAck = _validBits[_stbIdx] || ( writeReq && _writeReqPrev && wAddr == _wAddrPrev );
+  /* End set push outputs */
+
+  /* Set write outputs */
   assign wAddrMem = _address[_headIdx];
   assign wMemReq = _validHead;
   assign wDataMem = _data[_headIdx];
-  /* End set MEM outputs */
+  /* End set write outputs */
 
-	/* Set DCACHE outputs */
-	assign rValid = readReq && ((loadIndex != -1) && _validBits[loadIndex]);
+	/* Set read outputs */
+	assign rHit = readReq && ((loadIndex != -1) && _validBits[loadIndex]);
 	assign rData = _data[loadIndex];
   assign rAddrOut = _address[loadIndex];
-	assign wReqAck = _validBits[_stbIdx] || ( writeReq && _writeReqPrev && wAddr == _wAddrPrev );
-	/* End set DCACHE outputs */
+	/* End set read outputs */
 
   always @(posedge clk) 
   begin
@@ -91,7 +95,7 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
     end
   end
 
-	// Handle store from dCache
+	// Handle pushes
 	always @(negedge clk)
   begin
     /* NOTE:
@@ -100,7 +104,6 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
     */
     if(!rst)
     begin
-      // Don't merge with reset condition. The reset allways will have a value and valid1 not
       if (_writeReqNew)
       begin
         _validBits [_stbIdx] <= 1'b1;
@@ -110,12 +113,11 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
     end
   end
 
-	// Handle load from dCache
+	// Handle reads to buffered writes
 	always @(posedge clk, readReq, rAddr) 
   begin
     if(!rst)
     begin
-      // Don't merge with reset condition. The reset allways will have a value and valid1 not
       if (readReq)
       begin
 				loadIndex = -1;
@@ -127,12 +129,11 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
     end
   end
 
-	// Handle ack from memory
+	// Handle ack from output writes
 	always @(posedge clk) 
   begin
     if(!rst)
     begin
-      // Don't merge with reset condition. The reset allways will have a value and valid1 not
       if (wMemAck)
       begin
         _validBits [_headIdx] <= 1'b0;
