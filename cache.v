@@ -45,7 +45,10 @@ module cache(
 	wire readMiss;
 	
 	// Write handling variables
-	// Info extracted from wAddr
+  reg _WE, _wByte;
+  reg [proc.ARCH_BITS-1:0] _wAddr;
+  reg [proc.ARCH_BITS-1:0] _wData;
+	// Info extracted from _wAddr
 	wire [TAG_BITS-1:0] wTag;
 	wire [LINE_BITS-1:0] wLine;
 	wire [OFFSET_W_BITS-1:0] wOffsetW;
@@ -65,40 +68,49 @@ module cache(
 		// Initialization
 		if(rst)
 		begin
+      _WE <= 1'b0;
 			for( i = 0; i < CACHE_LINES; i=i+1 ) 
 			begin
 				validBits[i] = 0;
 				dirtyBits[i] = 0;
 			end
 		end
-
-    //Handle incoming data from memory
-    if (readMemReq && readMemLineValid && !eviction)
+    else
     begin
-      lines[readMemLine] <= readMemData;
-      tags[readMemLine] <= readMemTag;
-      validBits[readMemLine] <= 1'b1;
-      dirtyBits[readMemLine] <= 1'b0; 
+      // Handle incoming data from memory
+      if (readMemReq && readMemLineValid && !eviction)
+      begin
+        lines[readMemLine] <= readMemData;
+        tags[readMemLine] <= readMemTag;
+        validBits[readMemLine] <= 1'b1;
+        dirtyBits[readMemLine] <= 1'b0; 
+      end
+      else if(eviction && writeMemAck)
+      begin
+        validBits[readMemLine] <= 0;
+        dirtyBits[readMemLine] <= 0;
+      end
+
+      // Handle incoming write
+      _WE    <= WE;
+      _wByte <= wByte;
+      _wAddr <= wAddr;
+      _wData <= wData;
     end
-		else if(eviction && writeMemAck)
-		begin
-			validBits[readMemLine] <= 0;
-			dirtyBits[readMemLine] <= 0;
-		end
 	end
 
 	always @(negedge clk)
 	begin
 		//Handle writes
-		if(WE && !writeMiss) 
+		if(_WE && !writeMiss) 
 		begin: writes
 			integer offset, offsetB;
 			offset = (wOffsetW+1)*proc.ARCH_BITS-1;
-			offsetB = wByte ? (proc.ARCH_BITS-1)-((wOffsetB+1)*proc.BYTE_BITS-1) : 0;
-			if(wByte) 
-				lines[wLine][(offset-offsetB)-:proc.BYTE_BITS] = wData[proc.BYTE_BITS-1:0];
+			offsetB = _wByte ? (proc.ARCH_BITS-1)-((wOffsetB+1)*proc.BYTE_BITS-1) : 0;
+			if(_wByte) 
+				lines[wLine][(offset-offsetB)-:proc.BYTE_BITS] = _wData[proc.BYTE_BITS-1:0];
 			else
-				lines[wLine][offset-:proc.ARCH_BITS] = wData[proc.ARCH_BITS-1:0];
+				lines[wLine][offset-:proc.ARCH_BITS] = _wData[proc.ARCH_BITS-1:0];
 			dirtyBits[wLine] = 1;
 		end
 	end
@@ -114,20 +126,20 @@ module cache(
   assign rCurrentByteExtended = $signed( rCurrentWord[(rOffsetB+1)*proc.BYTE_BITS-1-:proc.BYTE_BITS] );
 	assign readMiss = RE && ((rCurrentTag != rTag) || (!validBits[rLine])); 
 
-	assign wTag = wAddr[proc.ARCH_BITS-1:proc.ARCH_BITS-TAG_BITS];
-	assign wLine = wAddr[proc.ARCH_BITS-TAG_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS];
-	assign wOffsetW = wAddr[proc.ARCH_BITS-TAG_BITS-LINE_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS-OFFSET_W_BITS];
-	assign wOffsetB = wAddr[proc.ARCH_BITS-TAG_BITS-LINE_BITS-OFFSET_W_BITS-1:0];
+	assign wTag = _wAddr[proc.ARCH_BITS-1:proc.ARCH_BITS-TAG_BITS];
+	assign wLine = _wAddr[proc.ARCH_BITS-TAG_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS];
+	assign wOffsetW = _wAddr[proc.ARCH_BITS-TAG_BITS-LINE_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS-OFFSET_W_BITS];
+	assign wOffsetB = _wAddr[proc.ARCH_BITS-TAG_BITS-LINE_BITS-OFFSET_W_BITS-1:0];
 
 	assign wCurrentTag = tags[wLine];
   assign wCurrentLine = lines[wLine];
 	assign wCurrentWord = wCurrentLine[(wOffsetW+1)*proc.ARCH_BITS-1-:proc.ARCH_BITS];
-	assign writeMiss = WE && ((wCurrentTag != wTag) || (!validBits[wLine]));
+	assign writeMiss = _WE && ((wCurrentTag != wTag) || (!validBits[wLine]));
 
   //Handle misses
   // We assume that a read and a write miss never will happen at the same time
-  assign readMemAddr = (WE && writeMiss) ? wAddr : rAddr;
-  assign readMemReq = (RE && readMiss) || (WE && writeMiss);
+  assign readMemAddr = (_WE && writeMiss) ? _wAddr : rAddr;
+  assign readMemReq = (RE && readMiss) || (_WE && writeMiss);
 	assign readMemLine = readMemAddr[proc.ARCH_BITS-TAG_BITS-1:proc.ARCH_BITS-TAG_BITS-LINE_BITS];
 	assign readMemTag = readMemAddr[proc.ARCH_BITS-1:proc.ARCH_BITS-TAG_BITS];
 	// There is no need to check tag because it is checked either in rValid or wAck, included 
@@ -137,7 +149,7 @@ module cache(
 	assign rData = rByte ? rCurrentByteExtended : rCurrentWord;
 	// if miss, go to memory and make it valid after receiving data
 	assign rValid = RE && !readMiss;
-	assign wAck = WE && !writeMiss;
+	assign wAck = _WE && !writeMiss;
 
 	// Assuming aligned writes
 	assign writeMemAddr = (tags[readMemLine] << proc.ARCH_BITS-TAG_BITS) + 
