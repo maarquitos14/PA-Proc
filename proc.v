@@ -8,7 +8,8 @@ module proc(input clk, input rst);
             OPCODE_BITS      = 7,
             REG_IDX_BITS     = 5,
             ROB_IDX_BITS     = 4,   // MODIFING ROB_BID_BITS AFFECTS THE NUMBER OF ROB SLOTS
-            ROB_SLOTS        = 16;  // Must be 2^ROB_IDX_BITS
+            ROB_SLOTS        = 16,  // Must be 2^ROB_IDX_BITS
+            MUL_NUM_STAGES   = 4;
 
 	parameter	PC_RST		= 32'h00001000,
 						PC_EXCEPT	= 32'h00002000;
@@ -183,6 +184,8 @@ module proc(input clk, input rst);
   wire [ARCH_BITS-1:0] pc_multToROB;
   wire [ARCH_BITS-1:0] data_multToROB;
   wire [REG_IDX_BITS-1:0] dst_multToROB;
+  wire [MUL_NUM_STAGES-1:0] dstRegsValidMult;
+  wire [REG_IDX_BITS-1:0] dstRegsIdxsMult[MUL_NUM_STAGES-1:0];
 
   // ROB and exceptions
   wire exceptROB, clearROB;
@@ -661,7 +664,10 @@ module proc(input clk, input rst);
                   /* Input data */
                   opcodeMult, robIdxMult, pcMult, regDstMult, data1Mult, data2Mult,
                   /* Output data */
-                  opcodeMultOut, robIdxMultOut, pcMultOut, regDstMultOut, dataHMult /* Not used now */, dataLMult);
+                  opcodeMultOut, robIdxMultOut, pcMultOut, regDstMultOut, dataHMult /* Not used now */, dataLMult,
+                  /* Data hazards output ports */
+                  dstRegsValidMult, dstRegsIdxsMult[0], dstRegsIdxsMult[1], dstRegsIdxsMult[2], dstRegsIdxsMult[3]
+  );
 
   // Set input port of ROB from Multiplier
   assign valid_multToROB = (opcodeMultOut == OPCODE_MUL);
@@ -730,6 +736,8 @@ module proc(input clk, input rst);
 /* | HAZARDS and BYPASS module logic                                           | */
 /* ----------------------------------------------------------------------------- */
 
+  // NOTE: Instructions that commit from DTLB don't produce register writes so are not valid
+  //       to stall the pipeline. Only, loads have to be considered.
   assign valid_dTLBToHZ = (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW);
 
   hazardsLogic hazards(
@@ -737,14 +745,14 @@ module proc(input clk, input rst);
     /* Input from decode */
       enableSrc1, regSrc1Decode, enableSrc2, regSrc2Decode,
     /* Input from the other pipeline */
-      valid_aluToROB, data_aluToROB, dst_aluToROB, we_aluToROB, // ALU
-      1'b0 /*valid1*/, 32'h11111111 /*data1*/, 5'b11111/*dst1*/, 1'b0/*we1*/, // MUL_TMP
-      valid_dTLBToHZ, 32'h11111111/*data*/, regDstDTLB, 1'b0/*we*/, // dTLB
-      1'b0, 32'h11111111, 5'b11111, 1'b0, // MUL_TMP
-      valid_dcToROB, data_dcToROB, dst_dcToROB, weReg_dcToROB, // dCache
-      1'b0, 32'h11111111, 5'b11111, 1'b0, // MUL_TMP
-      1'b0, 32'h11111111, 5'b11111, 1'b0, // MUL_TMP
-      valid_multToROB, data_multToROB, dst_multToROB, valid_multToROB, // MUL_TMP
+      valid_aluToROB,      data_aluToROB,  dst_aluToROB,       we_aluToROB,     // ALU
+      dstRegsValidMult[0], 32'h11111111,   dstRegsIdxsMult[0], 1'b0,            // MUL_0
+      valid_dTLBToHZ,      32'h11111111,   regDstDTLB,         1'b0,            // dTLB
+      dstRegsValidMult[1], 32'h11111111,   dstRegsIdxsMult[1], 1'b0,            // MUL_1
+      valid_dcToROB,       data_dcToROB,   dst_dcToROB,        weReg_dcToROB,   // dCache
+      dstRegsValidMult[2], 32'h11111111,   dstRegsIdxsMult[2], 1'b0,            // MUL_2
+      dstRegsValidMult[3], 32'h11111111,   dstRegsIdxsMult[3], 1'b0,            // MUL_3
+      valid_multToROB,     data_multToROB, dst_multToROB,      valid_multToROB, // MUL_4
     /* Output */
       stallDecodeSrc1, hitBypass1, bypassData1,
       stallDecodeSrc2, hitBypass2, bypassData2
