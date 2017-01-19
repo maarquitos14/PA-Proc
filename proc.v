@@ -248,8 +248,11 @@ module proc(input clk, input rst);
 	wire stallFetch;
 	wire stallITlbToFetch;
 
-	assign pcNext = exceptROB ? PC_EXCEPT : (memoryStallDCache ? pc : 
-									(takeBranch ? pcNextBranch : (!stallFetch ? pc+4 : pc))); 
+  assign pcNext = exceptROB         ? PC_EXCEPT :
+                  memoryStallDCache ? pc :
+                  takeBranch        ? pcNextBranch :
+                  stallDecode       ? pc :
+                  stallFetch        ? pc : pc+4;
 
   // Update input values of iTLB stage
 	always @(posedge clk) 
