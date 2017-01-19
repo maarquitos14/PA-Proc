@@ -18,6 +18,9 @@ module rob(input clk, input rst, input clear,
            /* Inout to check if ROB has write to some memory address */
            input readReq, input [proc.ARCH_BITS-1:0]rAddr,
            output [proc.ARCH_BITS-1:0]rData, output [proc.ARCH_BITS-1:0]rAddrOut, output rByteOut, output rHit,
+           /* Inout to check if ROB contains writes to some registers */
+           input [proc.REG_IDX_BITS-1:0] readRegDst1, output rRegHit1, output [proc.ARCH_BITS-1:0] rRegData1,
+           input [proc.REG_IDX_BITS-1:0] readRegDst2, output rRegHit2, output [proc.ARCH_BITS-1:0] rRegData2,
            /* Output to generate exceptions */
            output except, output [proc.ARCH_BITS-1:0]address, output [proc.ARCH_BITS-1:0]pc, output [proc.ARCH_BITS-1:0]type,
            /* Output to register file */
@@ -48,7 +51,7 @@ module rob(input clk, input rst, input clear,
   reg  [proc.ROB_IDX_BITS-1:0]_headIdx;
   wire [proc.ROB_IDX_BITS-1:0]_headIdxNext;
   wire                        _validHead;
-  integer                     _i, _rIdx;
+  integer                     _i, _rIdx, _rRegIdx1, _rRegIdx2;
 
   /* Set internal variables */
     assign _validHead = _validBits[_headIdx];
@@ -60,6 +63,10 @@ module rob(input clk, input rst, input clear,
     assign rAddrOut = _address[_rIdx];
     assign rByteOut = _wMemByteBits[_rIdx];
     assign rHit = readReq && ((_rIdx != -1) && _validBits[_rIdx]);
+    assign rRegHit1 = (_rRegIdx1 != -1) && _validBits[_rRegIdx1];
+    assign rRegData1 = _wDataReg[_rRegIdx1];
+    assign rRegHit2 = (_rRegIdx2 != -1) && _validBits[_rRegIdx2];
+    assign rRegData2 = _wDataReg[_rRegIdx2];
     assign except = _validHead ? _exceptBits[_headIdx] : 1'b0;
     assign address = _address[_headIdx];
     assign type = _type[_headIdx];
@@ -93,10 +100,11 @@ module rob(input clk, input rst, input clear,
   end
 
   // Handle reads
-  always @(posedge clk, readReq, rAddr, _headIdx)
+  always @(posedge clk, readReq, rAddr, _headIdx, readRegDst1, readRegDst2)
   begin
     if(!rst)
     begin
+      // Read writes to mem
       if (readReq)
       begin
         _rIdx = -1;
@@ -120,6 +128,51 @@ module rob(input clk, input rst, input clear,
           end
         end
 			end
+
+      // Read writes to registers 1
+      _rRegIdx1 = -1;
+      // NOTE: First iteration done outside to allow the used for condition
+      _i = _headIdx;
+      if (_validBits[_i])
+      begin
+        if (_weBits[_i] && _wDstReg[_i] == readRegDst1)
+        begin
+          _rRegIdx1 = _i;
+        end
+      end
+      for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+      begin
+        if (_validBits[_i])
+        begin
+          if (_weBits[_i] && _wDstReg[_i] == readRegDst1)
+          begin
+            _rRegIdx1 = _i;
+          end
+        end
+      end
+
+      // Read writes to registers 2
+      _rRegIdx2 = -1;
+      // NOTE: First iteration done outside to allow the used for condition
+      _i = _headIdx;
+      if (_validBits[_i])
+      begin
+        if (_weBits[_i] && _wDstReg[_i] == readRegDst2)
+        begin
+          _rRegIdx2 = _i;
+        end
+      end
+      for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+      begin
+        if (_validBits[_i])
+        begin
+          if (_weBits[_i] && _wDstReg[_i] == readRegDst2)
+          begin
+            _rRegIdx2 = _i;
+          end
+        end
+      end
+
     end
   end
 

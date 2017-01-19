@@ -109,7 +109,7 @@ module proc(input clk, input rst);
   reg  [ROB_IDX_BITS-1:0] robIdxALU;
   reg  [ARCH_BITS-1:0] pcALU;
   wire weALU;
-  wire valid_aluToROB;
+  wire valid_aluToROB, valid_aluToHZ;
   wire [ROB_IDX_BITS-1:0] robIdx_aluToROB;
   wire [ARCH_BITS-1:0] pc_aluToROB;
   wire [ARCH_BITS-1:0] data_aluToROB;
@@ -189,12 +189,14 @@ module proc(input clk, input rst);
 
   // ROB and exceptions
   wire exceptROB, clearROB;
+  wire rByteROB, rHitROB;
+  wire hit1_robToHZ, hit2_robToHZ;
 	wire [ARCH_BITS-1:0] exceptTypeROB;
   wire [ARCH_BITS-1:0] exceptAddrROB;
   wire [ARCH_BITS-1:0] exceptPcROB;
   wire [ARCH_BITS-1:0] rDataROB;
   wire [ARCH_BITS-1:0] rAddrROB;
-  wire rByteROB, rHitROB;
+  wire [ARCH_BITS-1:0] data1_robToHZ, data2_robToHZ;
 
   // WB stage
   wire [REG_IDX_BITS-1:0] regDstWB;
@@ -707,6 +709,9 @@ module proc(input clk, input rst);
     /* Inout to check if ROB contains write to some memory address */
       REDCache, dCacheAddr,
       rDataROB, rAddrROB, rByteROB, rHitROB,
+    /* Inout to check if ROB contains writes to some registers */
+      regSrc1Decode, hit1_robToHZ, data1_robToHZ,
+      regSrc2Decode, hit2_robToHZ, data2_robToHZ,
     /* Output exceptions */
        exceptROB, exceptAddrROB, exceptPcROB, exceptTypeROB,
     /* Output to register file */
@@ -742,13 +747,15 @@ module proc(input clk, input rst);
   // NOTE: Instructions that commit from DTLB don't produce register writes so are not valid
   //       to stall the pipeline. Only, loads have to be considered.
   assign valid_dTLBToHZ = (opcodeDTLB == OPCODE_LDB) || (opcodeDTLB == OPCODE_LDW);
+  // NOTE: LOADS in ALU doesn't commit to ROB but may stall the pipeline
+  assign valid_aluToHZ = valid_aluToROB || (opcodeALU == OPCODE_LDB) || (opcodeALU == OPCODE_LDW);
 
   hazardsLogic hazards(
     clk, rst,
     /* Input from decode */
       enableSrc1, regSrc1Decode, enableSrc2, regSrc2Decode,
     /* Input from the other pipeline */
-      valid_aluToROB,      data_aluToROB,  dst_aluToROB,       we_aluToROB,     // ALU
+      valid_aluToHZ,       data_aluToROB,  dst_aluToROB,       we_aluToROB,     // ALU
       dstRegsValidMult[0], 32'h11111111,   dstRegsIdxsMult[0], 1'b0,            // MUL_0
       valid_dTLBToHZ,      32'h11111111,   regDstDTLB,         1'b0,            // dTLB
       dstRegsValidMult[1], 32'h11111111,   dstRegsIdxsMult[1], 1'b0,            // MUL_1
@@ -756,6 +763,8 @@ module proc(input clk, input rst);
       dstRegsValidMult[2], 32'h11111111,   dstRegsIdxsMult[2], 1'b0,            // MUL_2
       dstRegsValidMult[3], 32'h11111111,   dstRegsIdxsMult[3], 1'b0,            // MUL_3
       valid_multToROB,     data_multToROB, dst_multToROB,      valid_multToROB, // MUL_4
+      hit1_robToHZ,        data1_robToHZ,  regSrc1Decode,      hit1_robToHZ,    // ROB src1
+      hit2_robToHZ,        data2_robToHZ,  regSrc2Decode,      hit2_robToHZ,    // ROB src2
     /* Output */
       stallDecodeSrc1, hitBypass1, bypassData1,
       stallDecodeSrc2, hitBypass2, bypassData2
