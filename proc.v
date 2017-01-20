@@ -119,7 +119,7 @@ module proc(input clk, input rst);
 	
 	//Instruction decoded
 	wire [6:0] opcodeDecode;
-	wire [6:0] opcodeDecodeToNext;
+	wire [6:0] opcodeDecodeToALU, opcodeDecodeToMult;
 	reg [6:0] opcodeALU;
 	wire [6:0] opcodeALUToDTLB;
 	reg [6:0] opcodeDTLB;
@@ -396,14 +396,14 @@ module proc(input clk, input rst);
 	assign offset15 =	offsetLo+(offsetHi<<10);
   assign data1Decode = hitBypass1 ? bypassData1 : data1RF;
   assign data2Decode = hitBypass2 ? bypassData2 : data2RF;
-
-  // TODO: Relax the next statement
   assign stallDecode = stallDecodeSrc1 || stallDecodeSrc2;
+  // TODO: Relax the next statement
   assign stallDecodeToALU = memoryStallDCache;
-  assign opcodeDecodeToNext = exceptROB        ? OPCODE_NOP : 
-                              stallDecodeToALU ? opcodeALU :
-                              takeBranch       ? OPCODE_NOP : 
-                              stallDecode      ? OPCODE_NOP : opcodeDecode;
+  assign opcodeDecodeToALU = exceptROB        ? OPCODE_NOP :
+                             stallDecodeToALU ? opcodeALU :
+                             takeBranch       ? OPCODE_NOP :
+                             stallDecode      ? OPCODE_NOP : opcodeDecode;
+  assign opcodeDecodeToMul = (exceptROB || takeBranch || stallDecode || stallDecodeToALU) ? OPCODE_NOP : opcodeDecode;
   assign regDstDecodeToNext = stallDecodeToALU ? regDstALU : regDstDecode;
   assign data1DecodeToNext = stallDecodeToALU ? srcB1ALU : data1Decode;
   assign data2DecodeToNext = stallDecodeToALU ? srcB2ALU : data2Decode;
@@ -428,7 +428,7 @@ module proc(input clk, input rst);
 		end
 		else
 		begin
-			opcodeALU <= opcodeDecodeToNext;
+			opcodeALU <= opcodeDecodeToALU;
 		end
 		  regDstALU <= regDstDecodeToNext;
 			srcB1ALU  <= data1DecodeToNext;
@@ -438,41 +438,41 @@ module proc(input clk, input rst);
 			wTLBTypeALU <= wTLBTypeDecodeToNext;
 
 			//R-type insts
-			if(opcodeDecodeToNext == OPCODE_ADD || opcodeDecodeToNext == OPCODE_SUB || 
-				 opcodeDecodeToNext == OPCODE_MUL)
+			if(opcodeDecodeToALU == OPCODE_ADD || opcodeDecodeToALU == OPCODE_SUB ||
+				 opcodeDecodeToALU == OPCODE_MUL)
 			begin
 				data1ALU = data1DecodeToNext;
 				data2ALU = data2DecodeToNext;
 			end
 			//M-type insts
-			else if(opcodeDecodeToNext == OPCODE_LDB || opcodeDecodeToNext == OPCODE_LDW || 
-							opcodeDecodeToNext == OPCODE_STB || opcodeDecodeToNext == OPCODE_STW)
+			else if(opcodeDecodeToALU == OPCODE_LDB || opcodeDecodeToALU == OPCODE_LDW ||
+							opcodeDecodeToALU == OPCODE_STB || opcodeDecodeToALU == OPCODE_STW)
 			begin
 				data1ALU <= data1DecodeToNext;
 				data2ALU <= offsetDecodeToNext;
 			end
-			else if (opcodeDecodeToNext == OPCODE_MOV)
+			else if (opcodeDecodeToALU == OPCODE_MOV)
 			begin
 				data1ALU <= data1DecodeToNext;
 				data2ALU <= 0;
 			end
-			else if (opcodeDecodeToNext == OPCODE_MOVI)
+			else if (opcodeDecodeToALU == OPCODE_MOVI)
 			begin
 				data1ALU <= immDecodeToNext;
 				data2ALU <= 0;
 			end
 			//B-type insts
-			else if (opcodeDecodeToNext == OPCODE_BEQ)
+			else if (opcodeDecodeToALU == OPCODE_BEQ)
 			begin
 				data1ALU <= pcDecodeToNext;
 				data2ALU <= $signed(offset15DecodeToNext);
 			end
-			else if (opcodeDecodeToNext == OPCODE_BZ)
+			else if (opcodeDecodeToALU == OPCODE_BZ)
 			begin
 				data1ALU <= pcDecodeToNext;
 				data2ALU <= $signed(offset20DecodeToNext);
 			end 
-			else if (opcodeDecodeToNext == OPCODE_JUMP)
+			else if (opcodeDecodeToALU == OPCODE_JUMP)
 			begin
 				data1ALU <= data1DecodeToNext;
 				data2ALU <= $signed(offset20DecodeToNext);
@@ -650,7 +650,7 @@ module proc(input clk, input rst);
 		end
 		else
 		begin
-			opcodeMult <= opcodeDecodeToNext;
+			opcodeMult <= opcodeDecodeToMult;
 		end
     regDstMult <= regDstDecodeToNext;
     data1Mult <= data1DecodeToNext;
