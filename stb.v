@@ -120,11 +120,14 @@ module stb(clk, rst, clear, writeReq, wAddr, wData, wReqAck, readReq, rAddr, rDa
     begin
       if (readReq)
       begin
-				loadIndex = -1;
-				for( i=0; (i < STB_SLOTS) && (loadIndex == -1); i=i+1)
-				begin
-					loadIndex = (_address[i][ADDRESS_BITS-1:BYTE_IDX_BITS] == rAddr[ADDRESS_BITS-1:BYTE_IDX_BITS]) ? i : loadIndex;
-	      end
+        //loadIndex = -1;
+        i = _headIdx;
+        loadIndex = (_address[i][ADDRESS_BITS-1:BYTE_IDX_BITS] == rAddr[ADDRESS_BITS-1:BYTE_IDX_BITS]) ? i : -1;
+        for ( i=(i+1)%STB_SLOTS; i != _headIdx; i=(i+1)%STB_SLOTS)
+// 				for( i=0; (i < STB_SLOTS) && (loadIndex == -1); i=i+1)
+        begin
+          loadIndex = (_address[i][ADDRESS_BITS-1:BYTE_IDX_BITS] == rAddr[ADDRESS_BITS-1:BYTE_IDX_BITS]) ? i : loadIndex;
+        end
 			end
     end
   end
