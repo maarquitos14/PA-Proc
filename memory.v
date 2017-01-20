@@ -1,8 +1,13 @@
-module memory(input clk, input rst,
-              input [proc.ARCH_BITS-1:0] rHPAddr, input rHPE, output [proc.MEMORY_LINE_BITS-1:0] rHPData, output rHPValid,
-              input [proc.ARCH_BITS-1:0] rLPAddr, input rLPE, output [proc.MEMORY_LINE_BITS-1:0] rLPData, output rLPValid,
-              input [proc.ARCH_BITS-1:0] wAddr, input wE, input [proc.MEMORY_LINE_BITS-1:0] wData, output wDone);
-
+module memory(
+  /* General inputs */
+  input clk, input rst,
+  /* High priority read port */
+  input [proc.ARCH_BITS-1:0] rHPAddr, input rHPE, output [proc.MEMORY_LINE_BITS-1:0] rHPData, output rHPValid,
+  /* Low priority read port*/
+  input [proc.ARCH_BITS-1:0] rLPAddr, input rLPE, output [proc.MEMORY_LINE_BITS-1:0] rLPData, output rLPValid,
+  /* Write port */
+  input [proc.ARCH_BITS-1:0] wAddr, input wE, input [proc.MEMORY_LINE_BITS-1:0] wData, output wDone
+);
 
   // Memory parameters
   parameter MEMORY_LINES = 4096, // Each line is 16B, 16B*4096=64KB
@@ -11,11 +16,34 @@ module memory(input clk, input rst,
   parameter DELAY_READ_CYCLES = 3'b111,
             DELAY_WRITE_CYCLES = 3'b101;
 
-  // Space reservation and initialization
+  // Space reservation and initialization, output file writes
+  integer _outFile, _i;
   reg [proc.MEMORY_LINE_BITS-1:0] _memory[MEMORY_LINES-1:0];
   initial
   begin
     $readmemh("data/memory.dat", _memory);
+    forever
+    begin
+      fork
+      begin
+        @(posedge wDone);
+        _outFile = $fopen("data/out_memory.dat", "w");
+        for( _i = 0; _i < MEMORY_LINES; _i=_i+8 )
+        begin
+          $fwrite(_outFile, "ADDRESS 0x%h\n", _i*16);
+          $fwrite(_outFile, "%h\n", _memory[_i]);
+          $fwrite(_outFile, "%h\n", _memory[_i+1]);
+          $fwrite(_outFile, "%h\n", _memory[_i+2]);
+          $fwrite(_outFile, "%h\n", _memory[_i+3]);
+          $fwrite(_outFile, "%h\n", _memory[_i+4]);
+          $fwrite(_outFile, "%h\n", _memory[_i+5]);
+          $fwrite(_outFile, "%h\n", _memory[_i+6]);
+          $fwrite(_outFile, "%h\n", _memory[_i+7]);
+			  end
+        $fclose(_outFile);
+      end
+      join
+    end
   end
 
   // Variables
