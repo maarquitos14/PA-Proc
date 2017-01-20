@@ -18,13 +18,19 @@ module hazardsLogic(input clk, input rst,
   output block2, output hitBypass2, output [proc.ARCH_BITS-1:0]bypassData2
 );
   
-  assign block1  = enable1 && !hitBypass1 && (
-    (regIdx1 == dst0 && valid0) || (regIdx1 == dst1 && valid1) ||
-    (regIdx1 == dst2 && valid2) || (regIdx1 == dst3 && valid3) ||
-    (regIdx1 == dst4 && valid4) || (regIdx1 == dst5 && valid5) ||
-    (regIdx1 == dst6 && valid6) || (regIdx1 == dst7 && valid7) ||
-    (regIdx1 == dst8 && valid8) || (regIdx1 == dst9 && valid9) );
-  assign hitBypass1  = enable1 && (
+  assign block1  = enable1 && (
+    (regIdx1 == dst0 && valid0) ? !we0 :
+    (regIdx1 == dst1 && valid1) ? !we1 :
+    (regIdx1 == dst2 && valid2) ? !we2 :
+    (regIdx1 == dst3 && valid3) ? !we3 :
+    (regIdx1 == dst4 && valid4) ? !we4 :
+    (regIdx1 == dst5 && valid5) ? !we5 :
+    (regIdx1 == dst6 && valid6) ? !we6 :
+    (regIdx1 == dst7 && valid7) ? !we7 :
+    (regIdx1 == dst8 && valid8) ? !we8 :
+    (regIdx1 == dst9 && valid9) ? !we9 :
+    1'b0);
+  assign hitBypass1  = enable1 && !block1 && (
     (regIdx1 == dst0 && valid0 && we0) || (regIdx1 == dst1 && valid1 && we1) ||
     (regIdx1 == dst2 && valid2 && we2) || (regIdx1 == dst3 && valid3 && we3) ||
     (regIdx1 == dst4 && valid4 && we4) || (regIdx1 == dst5 && valid5 && we5) ||
@@ -42,13 +48,19 @@ module hazardsLogic(input clk, input rst,
                        (regIdx1 == dst9 && valid9 && we9) ? data9 :
                        32'hFFFFFFFF;
   
-  assign block2  = enable2 && !hitBypass2 && (
-    (regIdx2 == dst0 && valid0) || (regIdx2 == dst1 && valid1) ||
-    (regIdx2 == dst2 && valid2) || (regIdx2 == dst3 && valid3) ||
-    (regIdx2 == dst4 && valid4) || (regIdx2 == dst5 && valid5) ||
-    (regIdx2 == dst6 && valid6) || (regIdx2 == dst7 && valid7) ||
-    (regIdx2 == dst8 && valid8) || (regIdx2 == dst9 && valid9) );
-  assign hitBypass2  = enable2 && (
+  assign block2  = enable2 && (
+    (regIdx2 == dst0 && valid0) ? !we0 :
+    (regIdx2 == dst1 && valid1) ? !we1 :
+    (regIdx2 == dst2 && valid2) ? !we2 :
+    (regIdx2 == dst3 && valid3) ? !we3 :
+    (regIdx2 == dst4 && valid4) ? !we4 :
+    (regIdx2 == dst5 && valid5) ? !we5 :
+    (regIdx2 == dst6 && valid6) ? !we6 :
+    (regIdx2 == dst7 && valid7) ? !we7 :
+    (regIdx2 == dst8 && valid8) ? !we8 :
+    (regIdx2 == dst9 && valid9) ? !we9 :
+    1'b0);
+  assign hitBypass2  = enable2 && !block2 && (
     (regIdx2 == dst0 && valid0 && we0) || (regIdx2 == dst1 && valid1 && we1) ||
     (regIdx2 == dst2 && valid2 && we2) || (regIdx2 == dst3 && valid3 && we3) ||
     (regIdx2 == dst4 && valid4 && we4) || (regIdx2 == dst5 && valid5 && we5) ||
