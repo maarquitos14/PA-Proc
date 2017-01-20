@@ -11,7 +11,7 @@ module hazardsLogic(input clk, input rst,
   input valid5, input [proc.ARCH_BITS-1:0]data5, input [proc.REG_IDX_BITS-1:0]dst5, input we5, // MUL2
   input valid6, input [proc.ARCH_BITS-1:0]data6, input [proc.REG_IDX_BITS-1:0]dst6, input we6, // MUL3
   input valid7, input [proc.ARCH_BITS-1:0]data7, input [proc.REG_IDX_BITS-1:0]dst7, input we7, // MUL4
-  input valid8, input [proc.ARCH_BITS-1:0]data8, input [proc.REG_IDX_BITS-1:0]dst8, input we8, // ROB src2
+  input valid8, input [proc.ARCH_BITS-1:0]data8, input [proc.REG_IDX_BITS-1:0]dst8, input we8, // ROB src1
   input valid9, input [proc.ARCH_BITS-1:0]data9, input [proc.REG_IDX_BITS-1:0]dst9, input we9, // ROB src2
   /* Output */
   output block1, output hitBypass1, output [proc.ARCH_BITS-1:0]bypassData1,

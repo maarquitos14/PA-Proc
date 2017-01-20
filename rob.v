@@ -117,7 +117,7 @@ module rob(input clk, input rst, input clear,
             _rIdx = _i;
           end
         end
-        for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+        for ( _i=(_headIdx+1)%proc.ROB_SLOTS; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
         begin
           if (_validBits[_i])
           begin
@@ -140,7 +140,7 @@ module rob(input clk, input rst, input clear,
           _rRegIdx1 = _i;
         end
       end
-      for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+      for ( _i=(_headIdx+1)%proc.ROB_SLOTS; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
       begin
         if (_validBits[_i])
         begin
@@ -162,7 +162,7 @@ module rob(input clk, input rst, input clear,
           _rRegIdx2 = _i;
         end
       end
-      for ( _i=_headIdx+1; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
+      for ( _i=(_headIdx+1)%proc.ROB_SLOTS; _i != _headIdx; _i=(_i+1)%proc.ROB_SLOTS )
       begin
         if (_validBits[_i])
         begin

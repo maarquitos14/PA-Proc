@@ -403,7 +403,7 @@ module proc(input clk, input rst);
                              stallDecodeToALU ? opcodeALU :
                              takeBranch       ? OPCODE_NOP :
                              stallDecode      ? OPCODE_NOP : opcodeDecode;
-  assign opcodeDecodeToMul = (exceptROB || takeBranch || stallDecode || stallDecodeToALU) ? OPCODE_NOP : opcodeDecode;
+  assign opcodeDecodeToMult = (exceptROB || takeBranch || stallDecode || stallDecodeToALU) ? OPCODE_NOP : opcodeDecode;
   assign regDstDecodeToNext = stallDecodeToALU ? regDstALU : regDstDecode;
   assign data1DecodeToNext = stallDecodeToALU ? srcB1ALU : data1Decode;
   assign data2DecodeToNext = stallDecodeToALU ? srcB2ALU : data2Decode;
