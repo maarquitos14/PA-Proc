@@ -368,7 +368,7 @@ module proc(input clk, input rst);
 	assign specialSrc1 = (opcodeDecode == OPCODE_MOV) || (opcodeDecode == OPCODE_IRET);
 
   assign modeRegData = exceptROB ? PRIVILEGE_OS : PRIVILEGE_USR;
-  assign specialRegsWE = exceptROB || specialRegsWEAlu;
+  assign specialRegsWE = (exceptROB && currentMode == PRIVILEGE_USR) || specialRegsWEAlu;
 	assign wTLBTypeDecode = offsetLo[0];
 
   // Set input port of ROB from DECODE
